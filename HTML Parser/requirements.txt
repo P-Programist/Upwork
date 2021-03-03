@@ -1,0 +1,4 @@
+beautifulsoup4==4.9.3
+six==1.15.0
+soupsieve==2.2
+transliterate==1.10.2
