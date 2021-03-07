@@ -22,6 +22,11 @@ HEADERS = {
     'Connection': 'keep-alive'
 }
 
+SOURCES = (
+    'https://www.topcashback.com/merchantslinks1.xml',
+    'https://www.topcashback.com/merchantslinks2.xml'
+)
+
 async def fetch_links_for_parsing(url):
     """The function take an URL to make request to and get list of links."""
 
@@ -31,7 +36,7 @@ async def fetch_links_for_parsing(url):
     template = re.compile("<loc>(.*?)</loc>")
 
     # Create a session for HTTP requests.
-    async with aiohttp.ClientSession(headers=HEADERS) as session:
+    async with aiohttp.ClientSession(headers=HEADERS, trust_env=True) as session:
 
         # Due to the session we make a request to the site where all links to parse are stored.
         async with session.get(url=url) as response:
@@ -53,15 +58,11 @@ async def fetch_html(url: str, session: aiohttp.ClientSession):
     """This function just make a request to a site to get HTML code 
         and pass it farther to the 'parse_html' function."""
 
-    # The line below is specially for stopping the script as it may break a site by multiple requests.
-    await asyncio.sleep(1.5)
-
     # These two lines are responsible for asking HTML data from site.
     async with session.get(url) as response:
         data = await response.text()
 
     return data
-
 
 
 async def parse_html(url: str):
@@ -70,17 +71,17 @@ async def parse_html(url: str):
         In the end, function will return a tuple that consists of two values: BRAND and BRAND CASHBACK    
     """
 
-    async with aiohttp.ClientSession(headers=HEADERS) as session:
+    async with aiohttp.ClientSession(headers=HEADERS, trust_env=True) as session:
 
-        # The line below stores HTML code.
-        html = await fetch_html(url, session) # This function is above function.
-
-        # As soon as we GET HTML code we pass it for parsing into BEAUTIFULSOUP4.
-        soup = bs(html, 'html.parser')
-
-        # Some pages do not have neither brand name nor cashback info.
-        # Since that we take this construction into TRY: EXCEPT: construction.
         try:
+            # The line below stores HTML code.
+            html = await fetch_html(url, session) # This function is above function.
+
+            # As soon as we GET HTML code we pass it for parsing into BEAUTIFULSOUP4.
+            soup = bs(html, 'html.parser')
+
+            # Some pages do not have neither brand name nor cashback info.
+            # Since that we take this construction into TRY: EXCEPT: construction.
             brand = soup.find('span', class_='gecko-merchant-heading').text # Here we extract brand name
             brand_cashback = soup.find('span', class_='cashback-desc').text[:-1] # Here we extract brand cashback
 
@@ -89,6 +90,15 @@ async def parse_html(url: str):
         except AttributeError as AE:
             return None
 
+        except (aiohttp.ClientError, aiohttp.http_exceptions.HttpProcessingError,) as e:
+            await asyncio.sleep(5)
+            await parse_html(url)
+            return None
+
+        except asyncio.TimeoutError:
+            await asyncio.sleep(5)
+            await parse_html(url)
+            return None
 
 
 async def write_data_to_csv():
@@ -99,19 +109,28 @@ async def write_data_to_csv():
     """
 
     tasks = []
-    
+
     # We load the file that keeps all URLS that we need to visit and parse.
     # So, we take one by one and pass it to functions above.
     async with aiofiles.open(str(PATH_TO_SCRIPT) + '/urls.txt', 'r') as f3:
         urls = await f3.readlines()
-        for url in urls:
-            tasks.append(
-                asyncio.create_task(
-                    parse_html(
-                        url.strip('\n')
-                        )
+        number_of_requests = len(urls)
+
+        requests_per_time = 50
+
+        for portion in range(0, number_of_requests, requests_per_time):
+
+            # The line below is specially for stopping the script as it may break a site by multiple requests.
+            await asyncio.sleep(5)
+
+            for url in urls[portion:portion + requests_per_time]:
+                tasks.append(
+                    asyncio.create_task(
+                        parse_html(
+                            url.strip('\n')
+                            )
+                    )
                 )
-            )
 
     # After all functions that we wrote before will made their job,
     # the result will be stored in a list that we assign to OUTPUT variable.
@@ -138,7 +157,7 @@ async def main():
     so we needed to extract these addresses first and only then start to visit them.
 
     In case, You will have the same situation with URLS where You need to EXTRACT them first and then to proceed,
-        all You need just ot replace them as those two below.
+        all You need just ot replace them SOURCES tuple at the top of this file.
 
     If You do not need to extract URLS from another site at all and You have them just stored in a file,
         rename this file as urls.txt and put this file right next to this script.
@@ -146,14 +165,15 @@ async def main():
     The script itsef will find urls.txt extract links from there and make requests.
     """
 
-    # Delete these lines if You have separated urls.txt file OR leave it as it is just replace links inside fetch_links_for_parsing() function.
+    # Delete these lines if You have special urls.txt file OR leave it as it is just replace links inside SOURCES list of URLS.
     #######################################################################################################
-    task1 = asyncio.create_task(fetch_links_for_parsing('https://www.topcashback.com/merchantslinks1.xml'))
-    task2 = asyncio.create_task(fetch_links_for_parsing('https://www.topcashback.com/merchantslinks2.xml'))
-
-    await asyncio.gather(task1, task2)
+    await asyncio.gather(
+        *(
+            asyncio.create_task(
+                fetch_links_for_parsing(source)) for source in SOURCES
+        )
+    )
     #######################################################################################################
-
 
     await write_data_to_csv()
 
