@@ -8,6 +8,8 @@ templates/
 *.so
 *.log
 *.csv
+*.txt
+constants.py
 
 # Distribution / packaging
 .Python
