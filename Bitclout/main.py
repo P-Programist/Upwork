@@ -55,8 +55,6 @@ class Authorization(object):
         load_account_btn = browser.find_element(
             By.XPATH,"//button[@class='btn btn-primary font-weight-bold fs-15px']")
 
-
-
         seed_form.click()
         time.sleep(0.5)
         seed_form.send_keys(SEEDS)
