@@ -5,17 +5,23 @@ import time
 from aiocsv import AsyncWriter
 import aiofiles
 from bs4 import BeautifulSoup as bs
-import uvloop
 
 from selenium import webdriver
+from selenium.common import exceptions
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
+
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.firefox.service import Service
+
 from webdriver_manager.firefox import GeckoDriverManager
+from webdriver_manager.chrome import ChromeDriverManager
+
 
 
 PATH = pathlib.Path(__file__).parent
-uvloop.install()
+
 
 # We ask seed of the user to log_in
 SEEDS = input('Insert Your seeds(separated by space): ')
@@ -32,8 +38,13 @@ class Authorization(object):
     def __init__(self, url):
         super(Authorization, self).__init__()
         self.url = url
-        self.service = Service(GeckoDriverManager().install())
 
+        self.chrome_service = Service(ChromeDriverManager().install())
+        self.firefox_service = Service(GeckoDriverManager().install())
+
+        self.options = Options()
+        self.options.add_argument("disable-infobars")
+        self.options.add_argument("--disable-extensions")
 
     def sign_in(self) -> str:
         """
@@ -42,7 +53,17 @@ class Authorization(object):
         2. Click on the "Load More" butten to upload more posts.
         The second step is necessary because of the site is using the lazy loading.
         """
-        browser = webdriver.Firefox(service=self.service)
+
+        try:
+            self.options.binary_location = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+            browser = webdriver.Chrome(options=self.options, service=self.chrome_service)
+        except exceptions.WebDriverException:
+            try:
+                browser = webdriver.Chrome(ChromeDriverManager().install())
+            except exceptions.SessionNotCreatedException:
+                browser = webdriver.Firefox(service=self.firefox_service)
+
+        browser.maximize_window()
 
         browser.get(self.url)
         assert 'Welcome to BitClout' in browser.title
@@ -65,10 +86,12 @@ class Authorization(object):
 
         load_more_posts_btn = browser.find_element(
             By.XPATH,"//div[@class='w-100 py-15px d-flex align-items-center justify-content-center cursor-pointer creator-leaderboard__load-more ng-star-inserted']")
+        
+        interval = 1.8
         for _ in range(PAGE_NUMBER):
             load_more_posts_btn.click()
-            time.sleep(1.1)
-
+            time.sleep(interval)
+            interval += 0.002
 
         content = browser.page_source
         browser.quit()
