@@ -1,6 +1,5 @@
 import os
 import csv
-import json
 import asyncio
 import aiohttp
 
@@ -104,7 +103,9 @@ async def company_urls(company):
 
     company_reviews_url = f"https://www.glassdoor.com/Reviews/{company_name}-Reviews-E{company[0]}.htm"
 
-    company_reviews_urls = [company_reviews_url,]
+    company_reviews_urls = [
+        (company[0], company[1], company_reviews_url,)
+    ]
 
     async with aiohttp.ClientSession(headers=headers) as s1:
         response = await s1.get(company_reviews_url)
@@ -122,26 +123,25 @@ async def company_urls(company):
         pages = users // 10 + 1 if users % 10 != 0 else users // 10
 
         for p in range(2,pages+1):
-            company_reviews_urls.append(f"https://www.glassdoor.com/Reviews/{company_name}-Reviews-E{company[0]}_P{p}.htm")
+            company_reviews_urls.append((company[0], company[1], f"https://www.glassdoor.com/Reviews/{company_name}-Reviews-E{company[0]}_P{p}.htm"))
 
-        return company[0], company[1], company_reviews_urls
+        return company_reviews_urls
 
-    return company[0], company[1], company_reviews_url
+    return company_reviews_url
 
 
 
-async def get_page(company: tuple):
+async def get_page(companies: tuple):
     async with aiohttp.ClientSession(headers=headers) as session:
-        for url in company[2]:
-            response = await session.get(url=url)
-
-            return company[0], company[1], await response.text()
+        for company in companies:
+            for row in company:
+                response = await session.get(url=row[2])
+                yield row[0], row[1], await response.text()
 
 
 class CompanyInfoExtractor(object):
-    def __init__(self, id_, name, html, *args, **kwargs) -> None:
+    def __init__(self, id_, name, *args, **kwargs) -> None:
         super(CompanyInfoExtractor, self).__init__(*args, **kwargs)
-        self.html = html
 
         self.company = name
         self.company_id = id_
@@ -154,15 +154,15 @@ class CompanyInfoExtractor(object):
             'css-1dc0bv4': 5
         }
 
+
+    async def extract_data_from_page(self, html):
         soup = bs(html, 'html.parser')
-        self.reviews_content = soup.find('div', attrs={"id": "ReviewsRef"})
+        reviews_content = soup.find('div', attrs={"id": "ReviewsRef"})
 
-
-    async def extract_data_from_page(self):
-        review_items = self.reviews_content.find_all('li', class_='noBorder empReview cf pb-0 mb-0')
+        review_items = reviews_content.find_all('li', class_='noBorder empReview cf pb-0 mb-0')
 
         for item in review_items:
-            overall = self.soup.find('div', class_='v2__EIReviewsRatingsStylesV2__ratingNum v2__EIReviewsRatingsStylesV2__large').text
+            overall = soup.find('div', class_='v2__EIReviewsRatingsStylesV2__ratingNum v2__EIReviewsRatingsStylesV2__large').text
 
             review_item = {
                 "company": self.company,
@@ -186,9 +186,8 @@ class CompanyInfoExtractor(object):
 
             helpful_text = re.findall('[0-9]+', item.find('div', class_='common__EiReviewDetailsStyle__socialHelpfulcontainer pt-std').text)
 
-            pros = item.find_all('div', class_='px-std')[-1].find('span', attrs={"data-test": "pros"}).text
-            cons = item.find_all('div', class_='px-std')[-1].find('span', attrs={"data-test": "cons"}).text
-
+            pros = item.find('span', attrs={"data-test": "pros"}).text
+            cons = item.find('span', attrs={"data-test": "cons"}).text
 
             rates_block = item.find('ul', class_="pl-0")
             rates = rates_block.find_all('div', attrs={"font-size": "sm"}) if rates_block else 0
@@ -213,36 +212,34 @@ class CompanyInfoExtractor(object):
             review_item["cons"] = cons
             review_item["helpful"] = helpful_text[0] if helpful_text else 0
 
-            ReviewsTable(review_item)
+            yield review_item
 
 
 async def main():
     file = get_filename()
-    requests = await asyncio.gather(*(company_urls(company) for company in get_companies_urls(file)[:10]))
-    print(requests)
-    return requests
+    requests = await asyncio.gather(
+        *(company_urls(company) for company in get_companies_urls(file)[:1])
+    )
+    
+    with Session(engine) as session:
+        async for comp_id, comp, html in get_page(requests):
+            instance = CompanyInfoExtractor(comp_id, comp)
+
+            async for inst in instance.extract_data_from_page(html):
+                session.add(ReviewsTable(inst))
+                session.commit()
+
+
 
 
 if __name__ == "__main__":
     asyncio.run(main())
 
-    # html = asyncio.run(get_page(['https://www.glassdoor.com/Reviews/American-Airlines-Reviews-E8.htm',]))
-    # data = asyncio.run(extract_data_from_page(html))
-
-    # while not data:
-    #     html = asyncio.run(get_page(['https://www.glassdoor.com/Reviews/American-Airlines-Reviews-E8.htm',]))
-    #     data = asyncio.run(extract_data_from_page(html))
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        result = session.query(ReviewsTable).all()
 
 
-    # with open(f'{PATH}/test.json', 'w') as test_json:
-    #     json.dump(
-    #         data,
-    #         test_json,
-    #         indent=4,
-    #         ensure_ascii=False
-    #     )
-
-
-    # Base.metadata.create_all(engine)
-    # with Session(engine) as session:
-    #     result = session.query(ReviewsTable).all()
+    for i in result:
+        print(i)
+        print()
