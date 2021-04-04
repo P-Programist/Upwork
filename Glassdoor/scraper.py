@@ -4,7 +4,7 @@ import json
 import asyncio
 import aiohttp
 
-from re import search, sub
+import re
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -98,100 +98,151 @@ headers = {
 }
 
 
-class CompanyInfoExtractor(object):
-    def __init__(self) -> None:
-        super().__init__()
+async def company_urls(company):
+    part_1 = company[-1].split('https://www.glassdoor.com/Overview/Working-at-')[-1]
+    company_name = part_1[:part_1.find('-EI')]
+
+    company_reviews_url = f"https://www.glassdoor.com/Reviews/{company_name}-Reviews-E{company[0]}.htm"
+
+    company_reviews_urls = [company_reviews_url,]
+
+    async with aiohttp.ClientSession(headers=headers) as s1:
+        response = await s1.get(company_reviews_url)
+
+        html = await response.text()
+
+    page = bs(html, 'html.parser')
+    pagination = page.find('div', class_='paginationFooter')
+
+    if pagination:
+        from_ = pagination.text.find('of') + 3
+        to_ = pagination.text.find('English Reviews')
+
+        users = int(pagination.text[from_:to_].replace(',', ''))
+        pages = users // 10 + 1 if users % 10 != 0 else users // 10
+
+        for p in range(2,pages+1):
+            company_reviews_urls.append(f"https://www.glassdoor.com/Reviews/{company_name}-Reviews-E{company[0]}_P{p}.htm")
+
+        return company[0], company[1], company_reviews_urls
+
+    return company[0], company[1], company_reviews_url
 
 
-async def get_page(urls: tuple):
+
+async def get_page(company: tuple):
     async with aiohttp.ClientSession(headers=headers) as session:
-        for url in urls:
+        for url in company[2]:
             response = await session.get(url=url)
 
-            return await response.text()
+            return company[0], company[1], await response.text()
 
 
-async def extract_data_from_page(html):
-    reviews_json = []
-    rates_map = {
-        'css-152xdkl': 1,
-        'css-19o85uz': 2,
-        'css-1ihykkv': 3,
-        'css-1c07csa': 4,
-        'css-1dc0bv4': 5
-    }
+class CompanyInfoExtractor(object):
+    def __init__(self, id_, name, html, *args, **kwargs) -> None:
+        super(CompanyInfoExtractor, self).__init__(*args, **kwargs)
+        self.html = html
 
-    soup = bs(html, 'html.parser')
-    reviews_content = soup.find('div', attrs={"id": "ReviewsRef"})
-    review_items = reviews_content.find_all('li', class_='noBorder empReview cf pb-0 mb-0')
+        self.company = name
+        self.company_id = id_
 
-    # review_item["company"] = company
-    # review_item["company_id"] = response.meta["company_id"]
-
-
-    for item in review_items:
-        review_item = {
-            "rating_overall": soup.find('div', class_='v2__EIReviewsRatingsStylesV2__ratingNum v2__EIReviewsRatingsStylesV2__large').text
+        self.rates_map = {
+            'css-152xdkl': 1,
+            'css-19o85uz': 2,
+            'css-1ihykkv': 3,
+            'css-1c07csa': 4,
+            'css-1dc0bv4': 5
         }
 
-        date, employee_title = item.find('span', class_='authorJobTitle middle common__EiReviewDetailsStyle__newGrey').text.split(' - ')
-        employee_status, years_at_company = item.find('span', class_='pt-xsm pt-md-0 css-1qxtz39 eg4psks0').text.split(', ')
-
-        location = employee_title.split(' in ')
-
-        # review_title = item.find('a', class_='reviewLink')
-        # review_title_link = item.find('a', class_='reviewLink')['href']
-
-        # helpful = item.find('div', class_='common__EiReviewDetailsStyle__socialHelpfulcontainer pt-std')
-        # pros, cons = item.find('div', class_='px-std').find_all('p', class_='mt-0 mb-0 pb v2__EIReviewDetailsV2__bodyColor v2__EIReviewDetailsV2__lineHeightLarge v2__EIReviewDetailsV2__isCollapsed  ')
-        # rates_block = item.find('aside', class_='gd-ui-tooltip-info toolTip tooltip css-1065bcc').div.div.ul
-        # rates = rates_block.find_all('li')
+        soup = bs(html, 'html.parser')
+        self.reviews_content = soup.find('div', attrs={"id": "ReviewsRef"})
 
 
-        # review_item["rating_balance"] = rates_map.get(rates[0].find_all('div')[-1]['class'])
-        # review_item["rating_culture"] = rates_map.get(rates[1].find_all('div')[-1]['class'])
-        # review_item["rating_diversity"] = rates_map.get(rates[2].find_all('div')[-1]['class'])
-        # review_item["rating_career"] = rates_map.get(rates[3].find_all('div')[-1]['class'])
-        # review_item["rating_comp"] = rates_map.get(rates[4].find_all('div')[-1]['class'])
-        # review_item["rating_mgmt"] = rates_map.get(rates[5].find_all('div')[-1]['class'])
+    async def extract_data_from_page(self):
+        review_items = self.reviews_content.find_all('li', class_='noBorder empReview cf pb-0 mb-0')
 
-        review_item["employee_status"] = employee_status
-        review_item["years_at_company"] = years_at_company
-        # review_item["review_title"] = review_title
-        review_item["date"] = date
-        review_item["employee_title"] = employee_title
-        review_item["location"] = location
-        # review_item["pros"] = pros
-        # review_item["cons"] = cons
-        
-        # review_item["helpful"] = helpful
+        for item in review_items:
+            overall = self.soup.find('div', class_='v2__EIReviewsRatingsStylesV2__ratingNum v2__EIReviewsRatingsStylesV2__large').text
 
-        reviews_json.append(review_item)
-    return reviews_json
+            review_item = {
+                "company": self.company,
+                "company_id": self.company_id,
+                "rating_overall": overall,
+                "rating_balance": 0,
+                "rating_culture": 0,
+                "rating_diversity": 0,
+                "rating_career": 0,
+                "rating_comp": 0,
+                "rating_mgmt": 0
+            }
+
+            date, employee_title = item.find('span', class_='authorJobTitle middle common__EiReviewDetailsStyle__newGrey').text.split(' - ')
+            employee_status, years_at_company = item.find('span', class_='pt-xsm pt-md-0 css-1qxtz39 eg4psks0').text.split(', ')
+
+            auth_location = item.find('span', class_='authorLocation')
+            location = auth_location.text if auth_location else auth_location
+
+            review_title = item.find('a', class_='reviewLink').text
+
+            helpful_text = re.findall('[0-9]+', item.find('div', class_='common__EiReviewDetailsStyle__socialHelpfulcontainer pt-std').text)
+
+            pros = item.find_all('div', class_='px-std')[-1].find('span', attrs={"data-test": "pros"}).text
+            cons = item.find_all('div', class_='px-std')[-1].find('span', attrs={"data-test": "cons"}).text
+
+
+            rates_block = item.find('ul', class_="pl-0")
+            rates = rates_block.find_all('div', attrs={"font-size": "sm"}) if rates_block else 0
+
+
+            if rates:
+                review_item["rating_balance"] = self.rates_map.get(rates[0]['class'][0])
+                review_item["rating_culture"] = self.rates_map.get(rates[1]['class'][0])
+                review_item["rating_diversity"] = self.rates_map.get(rates[2]['class'][0])
+                review_item["rating_career"] = self.rates_map.get(rates[3]['class'][0])
+                review_item["rating_comp"] = self.rates_map.get(rates[4]['class'][0])
+                review_item["rating_mgmt"] = self.rates_map.get(rates[5]['class'][0])
+
+
+            review_item["employee_status"] = employee_status
+            review_item["years_at_company"] = years_at_company
+            review_item["review_title"] = review_title
+            review_item["date"] = date
+            review_item["employee_title"] = employee_title
+            review_item["location"] = location
+            review_item["pros"] = pros
+            review_item["cons"] = cons
+            review_item["helpful"] = helpful_text[0] if helpful_text else 0
+
+            ReviewsTable(review_item)
+
+
+async def main():
+    file = get_filename()
+    requests = await asyncio.gather(*(company_urls(company) for company in get_companies_urls(file)[:10]))
+    print(requests)
+    return requests
 
 
 if __name__ == "__main__":
-    file = get_filename()
-    # for row in get_companies_urls(file):
-    #     print(row)
+    asyncio.run(main())
 
-    html = asyncio.run(get_page(['https://www.glassdoor.com/Reviews/American-Airlines-Reviews-E8.htm',]))
-    data = asyncio.run(extract_data_from_page(html))
+    # html = asyncio.run(get_page(['https://www.glassdoor.com/Reviews/American-Airlines-Reviews-E8.htm',]))
+    # data = asyncio.run(extract_data_from_page(html))
 
-    with open(f'{PATH}/test.json', 'w') as test_json:
-        json.dump(
-            data,
-            test_json,
-            indent=4,
-            ensure_ascii=False
-        )
+    # while not data:
+    #     html = asyncio.run(get_page(['https://www.glassdoor.com/Reviews/American-Airlines-Reviews-E8.htm',]))
+    #     data = asyncio.run(extract_data_from_page(html))
+
+
+    # with open(f'{PATH}/test.json', 'w') as test_json:
+    #     json.dump(
+    #         data,
+    #         test_json,
+    #         indent=4,
+    #         ensure_ascii=False
+    #     )
 
 
     # Base.metadata.create_all(engine)
     # with Session(engine) as session:
     #     result = session.query(ReviewsTable).all()
-
-    # https://www.glassdoor.com/Overview/Working-at-AAR-EI_IE4.11,14.htm
-    # https://www.glassdoor.com/Reviews/AAR-Reviews-E4.htm
-    # https://www.glassdoor.com/Reviews/AAR-Reviews-E4_P2.htm
-    # https://www.glassdoor.com/Reviews/AAR-Reviews-E4_P3.htm
