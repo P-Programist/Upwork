@@ -10,6 +10,7 @@ templates/
 *.csv
 *.txt
 constants.py
+*.db
 
 # Distribution / packaging
 .Python
