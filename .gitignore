@@ -11,6 +11,9 @@ templates/
 *.txt
 constants.py
 *.db
+*.xlsx
+*.MD
+*.pdf
 
 # Distribution / packaging
 .Python
