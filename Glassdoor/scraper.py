@@ -42,12 +42,12 @@ class ReviewsTable(Base):
     rating_overall = Column(String)
     rating_balance = Column(String)
     rating_culture = Column(String)
+    rating_diversity = Column(String)
     rating_career = Column(String)
     rating_comp = Column(String)
     rating_mgmt = Column(String)
     pros = Column(String)
     cons = Column(String)
-    rating_diversity = String()
 
     def __init__(self, review):
         """Initializing a new record"""
@@ -63,6 +63,7 @@ class ReviewsTable(Base):
         self.rating_overall = review["rating_overall"]
         self.rating_balance = review["rating_balance"]
         self.rating_culture = review["rating_culture"]
+        self.rating_diversity = review["rating_diversity"]
         self.rating_career = review["rating_career"]
         self.rating_comp = review["rating_comp"]
         self.rating_mgmt = review["rating_mgmt"]
@@ -71,7 +72,7 @@ class ReviewsTable(Base):
 
     def __repr__(self):
         """Method for determining the format of outputting data about a class instance (optional)"""
-        return "<Review %s %s %s %s %s>" % (self.company_id, self.company, self.date, self.title, self.rating_overall)
+        return "<Review %s %s %s %s>" % (self.company_id, self.company, self.date, self.rating_overall)
 
 
 def get_filename():
@@ -91,9 +92,15 @@ def get_companies_urls(filename):
 
 
 headers = {
-    "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) Gecko/20100101 Firefox/87.0",
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Encoding": "gzip, deflate",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Connection": "keep-alive",
     "Content-Type": "application/x-www-form-urlencoded",
-    "Connection": "keep-alive"
+    "Host": "www.glassdoor.com",
+    "Upgrade-Insecure-Requests": "1",
+    "Pragma": "no-cache",
 }
 
 
@@ -127,7 +134,7 @@ async def company_urls(company):
 
         return company_reviews_urls
 
-    return company_reviews_url
+    return company_reviews_urls
 
 
 
@@ -135,8 +142,11 @@ async def get_page(companies: tuple):
     async with aiohttp.ClientSession(headers=headers) as session:
         for company in companies:
             for row in company:
+                await asyncio.sleep(0.12)
                 response = await session.get(url=row[2])
-                yield row[0], row[1], await response.text()
+                html = await response.text()
+                yield row[0], row[1], html
+
 
 
 class CompanyInfoExtractor(object):
@@ -176,7 +186,14 @@ class CompanyInfoExtractor(object):
                 "rating_mgmt": 0
             }
 
-            date, employee_title = item.find('span', class_='authorJobTitle middle common__EiReviewDetailsStyle__newGrey').text.split(' - ')
+
+            author_title = item.find('span', class_='authorJobTitle middle common__EiReviewDetailsStyle__newGrey').text.split(' - ')
+
+            if len(author_title) > 2:
+                date, employee_title = author_title[0], ' '.join(author_title[1:])
+            else:
+                date, employee_title = author_title
+
             employee_status, years_at_company = item.find('span', class_='pt-xsm pt-md-0 css-1qxtz39 eg4psks0').text.split(', ')
 
             auth_location = item.find('span', class_='authorLocation')
@@ -193,7 +210,7 @@ class CompanyInfoExtractor(object):
             rates = rates_block.find_all('div', attrs={"font-size": "sm"}) if rates_block else 0
 
 
-            if rates:
+            if rates and len(rates) == 6:
                 review_item["rating_balance"] = self.rates_map.get(rates[0]['class'][0])
                 review_item["rating_culture"] = self.rates_map.get(rates[1]['class'][0])
                 review_item["rating_diversity"] = self.rates_map.get(rates[2]['class'][0])
@@ -217,29 +234,33 @@ class CompanyInfoExtractor(object):
 
 async def main():
     file = get_filename()
-    requests = await asyncio.gather(
-        *(company_urls(company) for company in get_companies_urls(file)[:1])
-    )
-    
-    with Session(engine) as session:
-        async for comp_id, comp, html in get_page(requests):
-            instance = CompanyInfoExtractor(comp_id, comp)
+    result = await asyncio.gather(*(company_urls(main_company_url) for main_company_url in get_companies_urls(file)[:2]))
 
-            async for inst in instance.extract_data_from_page(html):
-                session.add(ReviewsTable(inst))
-                session.commit()
+    with Session(bind=engine) as session:
+        with session.begin():
+            t1 = time.time()
+            async for comp_id, comp, html in get_page(result):
 
+                try:
+                    instance = CompanyInfoExtractor(comp_id, comp)
 
+                    async for inst in instance.extract_data_from_page(html):
+                        data = ReviewsTable(inst)
+                        session.add(data)
+                except Exception as e:
+                    with open('./output.txt', 'w') as output:
+                        output.write(e)
+                t2 = time.time()
+                print(t2-t1)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
-
+    import time
+    t1 = time.time()
+    Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
-    with Session(engine) as session:
-        result = session.query(ReviewsTable).all()
+    
+    asyncio.run(main())
+    t2 = time.time()
 
-
-    for i in result:
-        print(i)
-        print()
+    print(t2-t1)
