@@ -1,17 +1,31 @@
+"""
+Author: Azatot
+Date: Apr 2021
+
+This project relates to the Web Scrapers category and operates data from "glassdoor.com"
+Steps:
+    1. The script is looking for any *.csv files of specific structure(ID, NAME, URL) next to itself.
+        If the file is founded, the script uploads it and continue to work with that, 
+            otherwise it will ask the user to enter the ABSOLUTE PATH to the .csv file.
+    2. After all urls are defined, the script does the request for every single URL from csv 
+        to check how many pages are availiable for scrapng. 
+            The algorithm counts it autamatically based on the number of pages and generates ALL urls with all reviews.
+    3. 
+"""
+import re
 import os
 import csv
 import asyncio
 import aiohttp
-
-import re
 from pathlib import Path
+
+from bs4 import BeautifulSoup as bs
 
 from sqlalchemy.orm import Session
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, String
+from sqlalchemy.ext.declarative import declarative_base
 
-from bs4 import BeautifulSoup as bs
 
 PATH = Path(__file__).parent
 
@@ -87,7 +101,7 @@ def get_companies_urls(filename):
     with open(f'{PATH}/{filename}', 'r') as file:
         rows = csv.reader(file)
         return tuple(
-            (row[0], row[1], f'{row[-2]},{row[-1]}') for row in rows
+            (row[0], row[1], f'{row[-2]},{row[-1]}') for row in rows if str(row[0]).isdigit()
         )
 
 
