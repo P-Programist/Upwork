@@ -1,12 +1,8 @@
 import os
 import re
+import csv
 import fitz
 import pathlib
-
-PATH = str(pathlib.Path(__file__).parent)
-
-pdf_list = os.listdir(f'{PATH}/sds')
-
 
 
 sequences = {
@@ -375,15 +371,28 @@ def main(pdf, product_name=None, company_name=None):
 
 
 if __name__ == "__main__":
-    with open(PATH + '/output.csv', 'w') as file:
-        file.write('Product name', 'Company name', 'Email')
+    PATH = str(pathlib.Path(__file__).parent)
+    DIRECTORIES = os.listdir(PATH)
+    PDF_LIST = None
 
-        for pdf in pdf_list:
-            success = main(pdf)
 
-            if success:
-                file.write(success[0], success[1], success[2])
+    for directory in DIRECTORIES:
+        if '.' not in directory:
+            PDF_LIST = os.listdir(f'{PATH}/{directory}')
+            break
 
- 
- 
 
+    if PDF_LIST:
+        with open(PATH + '/output.csv', 'w') as file:
+            csv_writer = csv.writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+            csv_writer.writerow(('Product name', 'Company name', 'Email'))
+
+            for pdf in PDF_LIST:
+                success = main(pdf)
+
+                if success:
+                    csv_writer.writerow(success)
+    else:
+        print()
+        print('-----The folder with PDFs is NOT FOUND!-----')
+        print()
