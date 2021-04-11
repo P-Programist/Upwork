@@ -1,3 +1,39 @@
+"""
+    Author: Azatot
+
+    Description:
+        The main purpose of the script is to find a directory with PDFs files and extract: 
+            Product name, Company name, and Company email from there.
+
+        There are many occurrences of a "Product name" in different sequences, 
+            so the DICTIONARY "sequences" have the most common a
+                nd frequent RegEX expressions to extract the data.
+
+        Actually, a "Product name" is the most difficult part as it may appear on different pages and in a different order. 
+            Since that, there are 3 different functions to search for a "Product name".
+
+        It is more reasonable to search for "Company name" and "Email" only after a "Product name" is found, 
+            otherwise, it may be waste of time and resources.
+
+        At some points, the code is getting messy, however, 
+            the most efficient algorithm might not work for such kind of structure of PDFs.
+
+        Steps of execution:
+            1. Get the Product name by:
+                1.1 The PRODUCT NAME template
+                1.2 The TRADE NAME template
+                1.3 The PRODUCT INDENTIFIER template
+                1.4 The NAME OF PRODUCT template
+            
+            2. Get the Company name by:
+                2.1 The DETAILS OF THE SUPPLIER template
+                2.2 The MANUFACTURER template
+                2.3 The COMPANY NAME
+                2.4 The SUPPLIER template
+
+            3. Get the Email of the company
+"""
+
 import os
 import re
 import csv
@@ -5,6 +41,7 @@ import fitz
 import pathlib
 
 
+# The RegEX template expressions
 sequences = {
     "pn_v0": r'Product name.*',
     "pn_v1": r'name.+\w+.*',
@@ -49,6 +86,10 @@ sequences = {
 
 
 def re_constructor(sequence, text, ignore_case=True):
+    """
+        The functions gets 2 parameters to make the search by the template
+    """
+
     if ignore_case:
         template = re.compile(sequence, re.IGNORECASE)
     else:
@@ -60,6 +101,10 @@ def re_constructor(sequence, text, ignore_case=True):
 
 
 def product_name_finder(page_text):
+    """
+        The function get the PDF text and applies RegEX templates 
+            from sequences dictionary to find "product_name"
+    """
     product_name_v0 = re_constructor(sequences["pn_v0"], page_text)
 
     if product_name_v0:
@@ -106,6 +151,10 @@ def product_name_finder(page_text):
 
 
 def trade_name_finder(page_text):
+    """
+        The function get the PDF text and applies RegEX templates 
+            from sequences dictionary to find "trade_name"
+    """
     trade_name_v0 = re_constructor(sequences["tn_v0"], page_text)
 
     if trade_name_v0:
@@ -129,6 +178,10 @@ def trade_name_finder(page_text):
 
 
 def product_identifier_finder(page_text):
+    """
+        The function get the PDF text and applies RegEX templates 
+            from sequences dictionary to find "product_identifier"
+    """
     product_identifier_v0 = re_constructor(sequences["pi_v0"], page_text)
 
     if product_identifier_v0:
@@ -186,6 +239,10 @@ def product_identifier_finder(page_text):
 
 
 def other(page_text):
+    """
+        Some documents do not have certain order of text, 
+            so it neccessary to find some of them manually.
+    """
     other_v0 = re_constructor(sequences["oth_v0"], page_text)
 
     if other_v0:
@@ -219,6 +276,10 @@ def other(page_text):
 
 
 def company_name_finder(page_text):
+    """
+        The function tries to find the company name based on RegEX templates 
+            from sequences dictionary
+    """
     page_text = page_text.replace('\n \n \n', '\n')
 
     company_name_v0 = re_constructor(sequences["cn_v0"], page_text)
@@ -286,6 +347,10 @@ def company_name_finder(page_text):
 
 
 def find_email(page_text):
+    """
+        The function tries to find the company email based on RegEX templates 
+            from sequences dictionary
+    """
     email_v0 = re_constructor(sequences["email_v0"], page_text)
     
     if email_v0:
@@ -318,6 +383,9 @@ def find_email(page_text):
 
 
 def main(pdf, product_name=None, company_name=None):
+    """
+        The entry point of the script to execute all other function and check its outputs.
+    """
     with fitz.Document(f'{PATH}/sds/{pdf}') as document:
         page = document.load_page(0)
         pg_text = page.get_text()
