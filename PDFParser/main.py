@@ -247,8 +247,8 @@ def other(page_text):
 
     if other_v0:
         if len(other_v0.group(0)) > 1:
-            extracted_text_v0 = other_v0.group(0).strip().split('\n')[1]
-            return extracted_text_v0
+            extracted_text_v0 = other_v0.group(0).strip().split('\n')
+            return extracted_text_v0[1] if len(extracted_text_v0) > 1 else None
 
     other_v1 = re_constructor(sequences["oth_v1"], page_text)
 
@@ -382,11 +382,11 @@ def find_email(page_text):
         return email_v2.group(0).strip()
 
 
-def main(pdf, product_name=None, company_name=None):
+def main(directory, pdf, product_name=None, company_name=None):
     """
         The entry point of the script to execute all other function and check its outputs.
     """
-    with fitz.Document(f'{PATH}/sds/{pdf}') as document:
+    with fitz.Document(f'{PATH}/{directory}/{pdf}') as document:
         page = document.load_page(0)
         pg_text = page.get_text()
 
@@ -422,6 +422,7 @@ def main(pdf, product_name=None, company_name=None):
 
     if product_name and company_name:
         product_name = product_name.replace('name:', '').replace('·', '')
+        company_name = company_name.replace(':', '')
 
         if len(product_name) < 3 or\
             len(company_name) <= 3 or\
@@ -429,7 +430,9 @@ def main(pdf, product_name=None, company_name=None):
                     '1.' in company_name or\
                         'name' in product_name.lower() or\
                             'name' in company_name.lower() or\
-                                'number' in company_name.lower():
+                                'number' in company_name.lower()or\
+                                    'identifier' in product_name.lower()or\
+                                        ':' in company_name.lower():
             return False
 
         email = find_email(pg_text)
@@ -442,13 +445,14 @@ if __name__ == "__main__":
     PATH = str(pathlib.Path(__file__).parent)
     DIRECTORIES = os.listdir(PATH)
     PDF_LIST = None
+    DIRECTORY = None
 
 
     for directory in DIRECTORIES:
         if '.' not in directory:
             PDF_LIST = os.listdir(f'{PATH}/{directory}')
+            DIRECTORY = directory
             break
-
 
     if PDF_LIST:
         with open(PATH + '/output.csv', 'w') as file:
@@ -456,10 +460,15 @@ if __name__ == "__main__":
             csv_writer.writerow(('Product name', 'Company name', 'Email'))
 
             for pdf in PDF_LIST:
-                success = main(pdf)
+                try:
+                    success = main(DIRECTORY, pdf)
 
-                if success:
-                    csv_writer.writerow(success)
+                    if success:
+                        csv_writer.writerow(success)
+                except RuntimeError:
+                    print()
+                    print(f'-----File {pdf} is corrupted!-----')
+                    print()
     else:
         print()
         print('-----The folder with PDFs is NOT FOUND!-----')
