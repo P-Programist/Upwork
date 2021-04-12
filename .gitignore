@@ -3,12 +3,12 @@ __pycache__/
 templates/
 *.py[cod]
 *$py.class
+upwork_speech.txt
 
 # C extensions
 *.so
 *.log
 *.csv
-*.txt
 constants.py
 *.db
 *.xlsx
