@@ -252,9 +252,7 @@ async def main():
 
     with Session(bind=engine) as session:
         with session.begin():
-            t1 = time.time()
             async for comp_id, comp, html in get_page(result):
-
                 try:
                     instance = CompanyInfoExtractor(comp_id, comp)
 
@@ -264,8 +262,6 @@ async def main():
                 except Exception as e:
                     with open('./output.txt', 'w') as output:
                         output.write(e)
-                t2 = time.time()
-                print(t2-t1)
 
 
 if __name__ == "__main__":

@@ -66,7 +66,7 @@ class Authorization(object):
         self.options.add_argument("--disable-extensions")
 
 
-    def sign_in(self) -> str:
+    def start_browser(self) -> str:
         if sys.platform == 'win32':
             self.chrome_service = Service(ChromeDriverManager().install())
             self.options.binary_location = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
@@ -82,11 +82,11 @@ class Authorization(object):
             self.browser = webdriver.Firefox(service=self.firefox_service)
 
         self.browser.maximize_window()
-        self.browser.get(self.url)
+
+        return self.browser.get(self.url)
 
 
-
-    def make_search(self, filters):
+    def get_filtered_pages(self, filters):
         search_from = self.browser.find_element(By.ID, "search-box-input")
 
         search_button = self.browser.find_element(By.CLASS_NAME, "inline-block.SearchButton.clickable.float-right")
@@ -98,7 +98,7 @@ class Authorization(object):
         time.sleep(0.5)
 
         search_button.click()
-        time.sleep(3)
+        time.sleep(2)
 
         url = self.browser.current_url + '/filter/property-type=multifamily'
 
@@ -114,44 +114,50 @@ class Authorization(object):
             min_price = filters.get('min-price')
             url += f',min-price={min_price}'
 
-
         self.browser.get(url)
 
         pagination = self.browser.find_element(By.CLASS_NAME, "PagingControls")
         pagination_links = pagination.find_elements(By.TAG_NAME, "a")
 
-        return [link.get_attribute("href") for link in pagination_links]
+        return (link.get_attribute("href") for link in pagination_links)
+
+
+    def quit_bowser(self):
+        return self.browser.quit()
 
 
 
-    async def get_page_views(self, page):
+class DataMiner:
+    async def get_data(self, url):
+        await asyncio.sleep(1.5)
         async with aiohttp.ClientSession(headers=HEADERS) as session:
-            request = await session.get(page)
-            html = await request.text()
-
-            soup = bs(html, 'html.parser')
-            home_views = soup.find_all('div', class_='HomeViews')
-
-            for view in home_views:
-                all_offers = view.find_all('div', class_="HomeCardContainer")
-                for offer in all_offers:
-                    if offer.a:
-                        href = offer.a["href"]
-                        yield self.url + href
+            try:
+                request = await session.get(url)
+                html = await request.text()
+                return html
+            except (aiohttp.ClientError, aiohttp.http_exceptions.HttpProcessingError):
+                return []
 
 
+    def get_each_property_url(self, html):
+        soup = bs(html, 'html.parser')
+        home_views = soup.find_all('div', class_='HomeViews')
 
-    async def get_property_info(self, view):
-        async with aiohttp.ClientSession(headers=HEADERS) as session:
+        for view in home_views:
+            all_offers = view.find_all('div', class_="HomeCardContainer")
+            for offer in all_offers:
+                if offer.a:
+                    href = offer.a["href"]
+                    yield 'https://www.redfin.com' + href
+            
 
+    async def get_property_info(self, url):
+        data = await self.get_data(url)
+
+        if data:
             temp_view_data = []
-            await asyncio.sleep(1)
 
-            request = await session.get(view)
-            html = await request.text()
-
-            soup = bs(html, 'html.parser')
-
+            soup = bs(data, 'html.parser')
             interior = soup.find('div', class_='propertyDetailContainer-content useColumnCount')
 
             if not interior:
@@ -207,9 +213,8 @@ class Authorization(object):
             if temp_view_data_updated and len(temp_view_data_updated) > 1:
                return temp_view_data_updated
 
+        return ["" for _ in range(13)] 
 
-    def quit_bowser(self):
-        return self.browser.quit()
 
 
 
@@ -240,11 +245,23 @@ def set_filters():
 
 async def main():
     FILTER_FIELDS = set_filters()
-    auth = Authorization('https://www.redfin.com')
-    auth.sign_in()
-    pages = auth.make_search(FILTER_FIELDS)
 
-    page_views = (auth.get_page_views(page) for page in pages)
+    auth = Authorization('https://www.redfin.com')
+    auth.start_browser()
+
+    try:
+        pages = auth.get_filtered_pages(FILTER_FIELDS)
+    except exceptions.NoSuchElementException:
+        print('-'*100)
+        print(' ' * 4 +'---------------Your IP has been blocked, please reconnect with another IP!---------------')
+        print('-'*100)
+        return auth.quit_bowser()
+
+
+    dtmnr = DataMiner()
+    page_views = await asyncio.gather(*(dtmnr.get_data(page) for page in pages))
+
+    pagination_urls = (dtmnr.get_each_property_url(page_view) for page_view in page_views)
 
     async with aiofiles.open(
         file=str(PATH) + "/data.csv", mode="w", 
@@ -253,10 +270,10 @@ async def main():
         writer = AsyncWriter(afp, dialect="unix")
         await writer.writerow(["PropertyAddress", "Zip Code", "Units Total", "Bedrooms Total", "Price for Total Bedrooms", "Unit 1", "Price for Unit 1",  "Unit 2", "Price for Unit 2",  "Unit 3", "Price for Unit 3",  "Unit 4", "Price for Unit 4", ])
 
-        for gen_obj in page_views:
-            async for page in (view async for view in gen_obj):
-                data = await auth.get_property_info(page)
-                await writer.writerow(data)
+        for pagination_url in pagination_urls:
+            rows = await asyncio.gather(*(dtmnr.get_property_info(url) for url in tuple(url for url in pagination_url)))
+            for row in rows:
+                await writer.writerow(row)
     
     auth.quit_bowser()
 
