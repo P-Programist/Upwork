@@ -20,15 +20,14 @@ The scenario of the script is the following:
 
 The price for Zip Code and Total # of Bedrooms is based on relations.py file which was generated according to provided price list.
 '''
-
-
-import sys
+import os
 import time
 import asyncio
 import aiohttp
 import pathlib
 import aiofiles
 
+import numpy_financial as npf
 from aiocsv import AsyncWriter
 from bs4 import BeautifulSoup as bs
 
@@ -38,9 +37,9 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 
 from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.firefox.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
-from webdriver_manager.firefox import GeckoDriverManager
+
+
 
 from relations import prices
 
@@ -67,23 +66,40 @@ class Authorization(object):
 
 
     def start_browser(self) -> str:
-        if sys.platform == 'win32':
+        chromedriver_path = str(PATH) + '/chromedriver'
+
+        try:
             self.chrome_service = Service(ChromeDriverManager().install())
-            self.options.binary_location = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
             self.browser = webdriver.Chrome(options=self.options, service=self.chrome_service)
-
+            time.sleep(6)
+            self.browser.maximize_window()
+            self.browser.get(self.url)
+            return 1
+        except exceptions.WebDriverException:
             try:
-                self.browser = webdriver.Chrome(options=self.options, service=self.chrome_service)
+                self.chrome_service = Service(chromedriver_path)
+                self.browser = webdriver.Chrome(service=self.chrome_service)
+                time.sleep(6)
+                self.browser.maximize_window()
+                self.browser.get(self.url)
+                return 1
             except exceptions.WebDriverException:
-                self.firefox_service = Service(GeckoDriverManager().install())
-                self.browser = webdriver.Firefox(service=self.firefox_service)
-        else:
-            self.firefox_service = Service(GeckoDriverManager().install())
-            self.browser = webdriver.Firefox(service=self.firefox_service)
-
-        self.browser.maximize_window()
-
-        return self.browser.get(self.url)
+                try:
+                    self.browser = webdriver.Chrome(executable_path=chromedriver_path)
+                    time.sleep(6)
+                    self.browser.maximize_window()
+                    self.browser.get(self.url)
+                    return 1
+                except exceptions.WebDriverException:
+                    try:
+                        os.environ["SELENIUM_SERVER_JAR"] = str(PATH) + "/selenium-server-standalone-2.41.0.jar"
+                        self.browser = webdriver.Safari()
+                        self.browser.implicitly_wait(10)
+                        self.browser.get(self.url)
+                        return 1
+                    except:
+                        return 0
+        
 
 
     def get_filtered_pages(self, filters):
@@ -129,7 +145,7 @@ class Authorization(object):
 
 class DataMiner:
     async def get_data(self, url):
-        await asyncio.sleep(1.5)
+        await asyncio.sleep(2.5)
         async with aiohttp.ClientSession(headers=HEADERS) as session:
             try:
                 request = await session.get(url)
@@ -161,12 +177,14 @@ class DataMiner:
             interior = soup.find('div', class_='propertyDetailContainer-content useColumnCount')
 
             if not interior:
-                return ["" for _ in range(13)]
+                return [0 for _ in range(13)]
 
             frames = interior.find_all('div', class_='propertyDetailItem')
 
             address = soup.find('div', class_='street-address')
             zip_code = soup.find('div', class_='dp-subtext')
+            price = soup.find('div', class_='statsValue')
+
 
             if address:
                 temp_view_data.append(address.text)
@@ -174,7 +192,11 @@ class DataMiner:
             if zip_code:
                 zip_code = zip_code.text.split()[-1]
             
+            if price:
+                price = int(price.text.split('$')[-1].replace(',', ''))
+
             temp_view_data.append(zip_code)
+            temp_view_data.append(price)
 
             for frame in frames:
                 frame_header = frame.find('div', class_='listHeader')
@@ -201,6 +223,8 @@ class DataMiner:
                             temp_view_data.append(bedrooms_per_unit)
                             temp_view_data.append(prices.get(zip_code).get(int(bedrooms_per_unit)))
 
+            for _ in range(14 - len(temp_view_data)):
+                temp_view_data.append(0)
 
             temp_view_data_updated = []
 
@@ -213,7 +237,7 @@ class DataMiner:
             if temp_view_data_updated and len(temp_view_data_updated) > 1:
                return temp_view_data_updated
 
-        return ["" for _ in range(13)] 
+        return [0 for _ in range(15)] 
 
 
 
@@ -242,19 +266,87 @@ def set_filters():
     return FILTER_FIELDS
 
 
+def net_cashflow_calculator(data):
+    result = {}
+
+    interest_rate = 0.0425 # C5
+    tax_rate = 0.01 # E2
+    duration_of_loan_in_months = 360 # C6
+    monthly_property_insurance = 150 # E5
+    down_payment_percent = 0.2 # E7
+    property_managment = 0.05 # E8
+    total_price = data.get('total_price') # C4
+
+
+    unit_prices = []
+
+    if data.get('unit_1'):
+        unit_prices.append(data.get('unit_1'))
+
+    if data.get('unit_2'):
+        unit_prices.append(data.get('unit_2'))
+
+    if data.get('unit_3'):
+        unit_prices.append(data.get('unit_3'))
+
+    if data.get('unit_4'):
+        unit_prices.append(data.get('unit_4'))
+
+
+    loan_amount = round((1-down_payment_percent) * total_price, 2) # C7
+    down_payment_summ = round(down_payment_percent * total_price, 2) # C8
+    principal_and_interest = npf.pmt(interest_rate/12, duration_of_loan_in_months, -loan_amount, 2) # E4
+    monthly_property_tax_amount = round(total_price * tax_rate / 12, 2) # E6
+    pmt_summ = (loan_amount * interest_rate) / 12 # E10
+
+    gross_rent_monthly = sum(unit_prices) # C11
+    gross_rent_annual = gross_rent_monthly * 12 # D11
+
+    property_management_summ = property_managment * gross_rent_monthly # C19
+
+    monthly_net_cashflow = round(gross_rent_monthly - property_management_summ - principal_and_interest - monthly_property_insurance - monthly_property_tax_amount, 2)# C20
+    annual_net_cashflow = round(monthly_net_cashflow * 12, 2) # C21
+
+    interest_only_loan_summ = sum(unit_prices[:3]) - property_management_summ - monthly_property_tax_amount - monthly_property_insurance - pmt_summ # C9
+
+    interest_only_loan_percent = (interest_only_loan_summ * 12) / down_payment_summ
+
+    total_invested = int(round((annual_net_cashflow / down_payment_summ) * 100, 0))
+
+
+    result["loan_amount"] = loan_amount
+    result["down_payment_summ"] = down_payment_summ
+    result["principal_and_interest"] = principal_and_interest
+    result["monthly_property_tax_amount"] = monthly_property_tax_amount
+    result["interest_only_loan_summ"] = interest_only_loan_summ
+    result["interest_only_loan_percent"] = interest_only_loan_percent
+    result["pmt_summ"] = pmt_summ
+    result["gross_rent_monthly"] = gross_rent_monthly
+    result["gross_rent_annual"] = gross_rent_annual
+    result["property_management_summ"] = property_management_summ
+    result["monthly_net_cashflow"] = monthly_net_cashflow
+    result["annual_net_cashflow"] = annual_net_cashflow
+    result["total_invested"] = total_invested
+
+
+    return result
+
 
 async def main():
     FILTER_FIELDS = set_filters()
 
     auth = Authorization('https://www.redfin.com')
-    auth.start_browser()
+    if not auth.start_browser():
+        print('---------------Browser is not found or ChromeDriver is not installed!---------------')
+        return 0
+
 
     try:
         pages = auth.get_filtered_pages(FILTER_FIELDS)
     except exceptions.NoSuchElementException:
-        print('-'*100)
-        print(' ' * 4 +'---------------Your IP has been blocked, please reconnect with another IP!---------------')
-        print('-'*100)
+        print('-'*130)
+        print(' ' * 4 +'---------------Wrong Property Address! \n\tor\n\t\t Your IP has been blocked, please try again later!---------------')
+        print('-'*130)
         return auth.quit_bowser()
 
 
@@ -263,22 +355,35 @@ async def main():
 
     pagination_urls = (dtmnr.get_each_property_url(page_view) for page_view in page_views)
 
+    auth.quit_bowser()
+
     async with aiofiles.open(
         file=str(PATH) + "/data.csv", mode="w", 
         encoding="utf-8", newline="") as afp:
         
         writer = AsyncWriter(afp, dialect="unix")
-        await writer.writerow(["PropertyAddress", "Zip Code", "Units Total", "Bedrooms Total", "Price for Total Bedrooms", "Unit 1", "Price for Unit 1",  "Unit 2", "Price for Unit 2",  "Unit 3", "Price for Unit 3",  "Unit 4", "Price for Unit 4", ])
+        await writer.writerow(["PropertyAddress", "ZipCode", "TotalPrice", "UnitsTotal", "BedroomsTotal", "PriceForTotalBedrooms", "Unit1", "PriceForUnit1",  "Unit2", "PriceForUnit2",  "Unit3", "PriceForUnit3",  "Unit4", "PriceForUnit4", "MonthlyNetCashflow", "AnnualNetCashflow", "ReturnOnInvestment"])
 
         for pagination_url in pagination_urls:
+            await asyncio.sleep(1.4)
             rows = await asyncio.gather(*(dtmnr.get_property_info(url) for url in tuple(url for url in pagination_url)))
             for row in rows:
+                array = {
+                    "total_price": row[2]
+                }
+
+                array["unit_1"] = row[7]
+                array["unit_2"] = row[9]
+                array["unit_3"] = row[11]
+                array["unit_4"] = row[11]
+
+                calculations = net_cashflow_calculator(array)
+                row.append(calculations.get("monthly_net_cashflow"))
+                row.append(calculations.get("annual_net_cashflow"))
+                row.append(calculations.get("total_invested"))
                 await writer.writerow(row)
-    
-    auth.quit_bowser()
+
 
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-
