@@ -27,6 +27,7 @@ import aiohttp
 import pathlib
 import aiofiles
 
+
 import numpy_financial as npf
 from aiocsv import AsyncWriter
 from bs4 import BeautifulSoup as bs
@@ -40,8 +41,8 @@ from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 
 
-
 from relations import prices
+
 
 
 HEADERS = {
@@ -59,47 +60,39 @@ class Authorization(object):
     def __init__(self, url):
         super(Authorization, self).__init__()
         self.url = url
+        self.url_split = url
 
         self.options = Options()
         self.options.add_argument("disable-infobars")
         self.options.add_argument("--disable-extensions")
-
+        self.options.add_argument('user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36')
+        self.options.add_argument("start-fullscreen")
 
     def start_browser(self) -> str:
-        chromedriver_path = str(PATH) + '/chromedriver'
+        chromedriver_path = str(PATH) + '/chromedriver_linux64/chromedriver'
 
         try:
-            self.chrome_service = Service(ChromeDriverManager().install())
-            self.browser = webdriver.Chrome(options=self.options, service=self.chrome_service)
-            time.sleep(6)
-            self.browser.maximize_window()
+            self.browser = webdriver.Chrome(options=self.options, executable_path=chromedriver_path)
+            time.sleep(3)
             self.browser.get(self.url)
             return 1
-        except exceptions.WebDriverException:
+        except:
             try:
-                self.chrome_service = Service(chromedriver_path)
-                self.browser = webdriver.Chrome(service=self.chrome_service)
-                time.sleep(6)
-                self.browser.maximize_window()
+                self.chrome_service = Service(ChromeDriverManager().install())
+                self.browser = webdriver.Chrome(options=self.options, service=self.chrome_service)
+                time.sleep(3)
                 self.browser.get(self.url)
                 return 1
-            except exceptions.WebDriverException:
+            except:
                 try:
-                    self.browser = webdriver.Chrome(executable_path=chromedriver_path)
-                    time.sleep(6)
-                    self.browser.maximize_window()
+                    self.chrome_service = Service(chromedriver_path)
+                    self.browser = webdriver.Chrome(options=self.options, service=self.chrome_service)
+                    time.sleep(3)
                     self.browser.get(self.url)
                     return 1
-                except exceptions.WebDriverException:
-                    try:
-                        os.environ["SELENIUM_SERVER_JAR"] = str(PATH) + "/selenium-server-standalone-2.41.0.jar"
-                        self.browser = webdriver.Safari()
-                        self.browser.implicitly_wait(10)
-                        self.browser.get(self.url)
-                        return 1
-                    except:
-                        return 0
-        
+                except:
+                    return 0
+
 
 
     def get_filtered_pages(self, filters):
@@ -108,13 +101,13 @@ class Authorization(object):
         search_button = self.browser.find_element(By.CLASS_NAME, "inline-block.SearchButton.clickable.float-right")
 
         search_from.click()
-        time.sleep(0.5)
+        time.sleep(1)
 
         search_from.send_keys(filters.get('city'))
-        time.sleep(0.5)
+        time.sleep(1)
 
         search_button.click()
-        time.sleep(2)
+        time.sleep(4)
 
         url = self.browser.current_url + '/filter/property-type=multifamily'
 
@@ -132,15 +125,17 @@ class Authorization(object):
 
         self.browser.get(url)
 
-        pagination = self.browser.find_element(By.CLASS_NAME, "PagingControls")
-        pagination_links = pagination.find_elements(By.TAG_NAME, "a")
+        try:
+            pagination = self.browser.find_element(By.CLASS_NAME, "PagingControls")
+            pagination_links = pagination.find_elements(By.TAG_NAME, "a")
 
-        return (link.get_attribute("href") for link in pagination_links)
+            return (link.get_attribute("href") for link in pagination_links)
+        except:
+            return (url,)
 
 
     def quit_bowser(self):
         return self.browser.quit()
-
 
 
 class DataMiner:
@@ -241,7 +236,6 @@ class DataMiner:
 
 
 
-
 def set_filters():
     FILTER_FIELDS = {}
 
@@ -295,23 +289,20 @@ def net_cashflow_calculator(data):
 
     loan_amount = round((1-down_payment_percent) * total_price, 2) # C7
     down_payment_summ = round(down_payment_percent * total_price, 2) # C8
-    principal_and_interest = npf.pmt(interest_rate/12, duration_of_loan_in_months, -loan_amount, 2) # E4
+    principal_and_interest = round(npf.pmt(interest_rate/12, duration_of_loan_in_months, -loan_amount, 2), 1) # E4
     monthly_property_tax_amount = round(total_price * tax_rate / 12, 2) # E6
-    pmt_summ = (loan_amount * interest_rate) / 12 # E10
-
+    pmt_summ = round((loan_amount * interest_rate) / 12, 7) # E10
     gross_rent_monthly = sum(unit_prices) # C11
-    gross_rent_annual = gross_rent_monthly * 12 # D11
-
     property_management_summ = property_managment * gross_rent_monthly # C19
-
+    interest_only_loan_summ = sum(unit_prices[:3]) - property_management_summ - monthly_property_tax_amount - monthly_property_insurance - pmt_summ # C9
+    gross_rent_annual = gross_rent_monthly * 12 # D11
     monthly_net_cashflow = round(gross_rent_monthly - property_management_summ - principal_and_interest - monthly_property_insurance - monthly_property_tax_amount, 2)# C20
     annual_net_cashflow = round(monthly_net_cashflow * 12, 2) # C21
-
-    interest_only_loan_summ = sum(unit_prices[:3]) - property_management_summ - monthly_property_tax_amount - monthly_property_insurance - pmt_summ # C9
-
-    interest_only_loan_percent = (interest_only_loan_summ * 12) / down_payment_summ
-
-    total_invested = int(round((annual_net_cashflow / down_payment_summ) * 100, 0))
+    interest_only_loan_percent = round((interest_only_loan_summ * 12) / down_payment_summ, 2)
+    total_invested = int(down_payment_summ + 0) # E 20
+    pay_off_in_years = round(down_payment_summ / annual_net_cashflow, 2) # E 21
+    return_on_investment = round(annual_net_cashflow / total_invested, 2) * 100 # E 13
+    monthly_loan_payment = monthly_property_insurance + principal_and_interest + monthly_property_tax_amount # D 2
 
 
     result["loan_amount"] = loan_amount
@@ -327,7 +318,8 @@ def net_cashflow_calculator(data):
     result["monthly_net_cashflow"] = monthly_net_cashflow
     result["annual_net_cashflow"] = annual_net_cashflow
     result["total_invested"] = total_invested
-
+    result["return_on_investment"] = return_on_investment
+    result["monthly_loan_payment"] = monthly_loan_payment
 
     return result
 
@@ -336,23 +328,22 @@ async def main():
     FILTER_FIELDS = set_filters()
 
     auth = Authorization('https://www.redfin.com')
-    if not auth.start_browser():
-        print('---------------Browser is not found or ChromeDriver is not installed!---------------')
-        return 0
+    browser = auth.start_browser()
 
+    if not browser:
+        print('---------------Browser is not found or ChromeDriver is not installed!---------------')
+        return auth.quit_bowser()
 
     try:
         pages = auth.get_filtered_pages(FILTER_FIELDS)
-    except exceptions.NoSuchElementException:
-        print('-'*130)
-        print(' ' * 4 +'---------------Wrong Property Address! \n\tor\n\t\t Your IP has been blocked, please try again later!---------------')
-        print('-'*130)
+    except:
+        print('--------- Check internet connection and try again! ---------')
         return auth.quit_bowser()
 
 
     dtmnr = DataMiner()
-    page_views = await asyncio.gather(*(dtmnr.get_data(page) for page in pages))
 
+    page_views = await asyncio.gather(*(dtmnr.get_data(page) for page in pages))
     pagination_urls = (dtmnr.get_each_property_url(page_view) for page_view in page_views)
 
     auth.quit_bowser()
@@ -375,12 +366,12 @@ async def main():
                 array["unit_1"] = row[7]
                 array["unit_2"] = row[9]
                 array["unit_3"] = row[11]
-                array["unit_4"] = row[11]
+                array["unit_4"] = row[13]
 
                 calculations = net_cashflow_calculator(array)
                 row.append(calculations.get("monthly_net_cashflow"))
                 row.append(calculations.get("annual_net_cashflow"))
-                row.append(calculations.get("total_invested"))
+                row.append(calculations.get("return_on_investment"))
                 await writer.writerow(row)
 
 

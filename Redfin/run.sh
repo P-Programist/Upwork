@@ -1,7 +1,8 @@
 # Define Absolute Path
-SCRIPT=$(readlink -f $0)
-SCRIPTPATH=`dirname $SCRIPT`
+# SCRIPT=$(readlink -f $0)
+# SCRIPTPATH=`dirname $SCRIPT`
 
-# $SCRIPTPATH/drivers.sh # Comment out this line
+# Remove or put `#` symbol on the line below to comment out this line
+# /Users/umairrizwan/Downloads/Redfin/drivers.sh
 
-python3 $SCRIPTPATH/main.py
+python3 /Users/umairrizwan/Downloads/Redfin/main.py
