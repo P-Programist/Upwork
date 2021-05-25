@@ -69,7 +69,7 @@ class Authorization(object):
         self.options.add_argument("start-fullscreen")
 
     def start_browser(self) -> str:
-        chromedriver_path = str(PATH) + '/chromedriver_linux64/chromedriver'
+        chromedriver_path = str(PATH) + '/chromedriver_mac64/chromedriver'
 
         try:
             self.browser = webdriver.Chrome(options=self.options, executable_path=chromedriver_path)
@@ -84,14 +84,7 @@ class Authorization(object):
                 self.browser.get(self.url)
                 return 1
             except:
-                try:
-                    self.chrome_service = Service(chromedriver_path)
-                    self.browser = webdriver.Chrome(options=self.options, service=self.chrome_service)
-                    time.sleep(3)
-                    self.browser.get(self.url)
-                    return 1
-                except:
-                    return 0
+                return 0
 
 
 
@@ -291,35 +284,35 @@ def net_cashflow_calculator(data):
     down_payment_summ = round(down_payment_percent * total_price, 2) # C8
     principal_and_interest = round(npf.pmt(interest_rate/12, duration_of_loan_in_months, -loan_amount, 2), 1) # E4
     monthly_property_tax_amount = round(total_price * tax_rate / 12, 2) # E6
-    pmt_summ = round((loan_amount * interest_rate) / 12, 7) # E10
+    # pmt_summ = round((loan_amount * interest_rate) / 12, 7) # E10
     gross_rent_monthly = sum(unit_prices) # C11
     property_management_summ = property_managment * gross_rent_monthly # C19
-    interest_only_loan_summ = sum(unit_prices[:3]) - property_management_summ - monthly_property_tax_amount - monthly_property_insurance - pmt_summ # C9
-    gross_rent_annual = gross_rent_monthly * 12 # D11
+    # interest_only_loan_summ = sum(unit_prices[:3]) - property_management_summ - monthly_property_tax_amount - monthly_property_insurance - pmt_summ # C9
+    # gross_rent_annual = gross_rent_monthly * 12 # D11
     monthly_net_cashflow = round(gross_rent_monthly - property_management_summ - principal_and_interest - monthly_property_insurance - monthly_property_tax_amount, 2)# C20
     annual_net_cashflow = round(monthly_net_cashflow * 12, 2) # C21
-    interest_only_loan_percent = round((interest_only_loan_summ * 12) / down_payment_summ, 2)
+    # interest_only_loan_percent = round((interest_only_loan_summ * 12) / down_payment_summ, 2)
     total_invested = int(down_payment_summ + 0) # E 20
-    pay_off_in_years = round(down_payment_summ / annual_net_cashflow, 2) # E 21
-    return_on_investment = round(annual_net_cashflow / total_invested, 2) * 100 # E 13
-    monthly_loan_payment = monthly_property_insurance + principal_and_interest + monthly_property_tax_amount # D 2
+    # pay_off_in_years = round(down_payment_summ / annual_net_cashflow, 2) # E 21
+    return_on_investment = int(round(annual_net_cashflow / total_invested, 2) * 100) # E 13
+    # monthly_loan_payment = monthly_property_insurance + principal_and_interest + monthly_property_tax_amount # D 2
 
 
-    result["loan_amount"] = loan_amount
-    result["down_payment_summ"] = down_payment_summ
-    result["principal_and_interest"] = principal_and_interest
-    result["monthly_property_tax_amount"] = monthly_property_tax_amount
-    result["interest_only_loan_summ"] = interest_only_loan_summ
-    result["interest_only_loan_percent"] = interest_only_loan_percent
-    result["pmt_summ"] = pmt_summ
-    result["gross_rent_monthly"] = gross_rent_monthly
-    result["gross_rent_annual"] = gross_rent_annual
-    result["property_management_summ"] = property_management_summ
+    # result["loan_amount"] = loan_amount
+    # result["down_payment_summ"] = down_payment_summ
+    # result["principal_and_interest"] = principal_and_interest
+    # result["monthly_property_tax_amount"] = monthly_property_tax_amount
+    # result["interest_only_loan_summ"] = interest_only_loan_summ
+    # result["interest_only_loan_percent"] = interest_only_loan_percent
+    # result["pmt_summ"] = pmt_summ
+    # result["gross_rent_monthly"] = gross_rent_monthly
+    # result["gross_rent_annual"] = gross_rent_annual
+    # result["property_management_summ"] = property_management_summ
     result["monthly_net_cashflow"] = monthly_net_cashflow
     result["annual_net_cashflow"] = annual_net_cashflow
-    result["total_invested"] = total_invested
+    # result["total_invested"] = total_invested
     result["return_on_investment"] = return_on_investment
-    result["monthly_loan_payment"] = monthly_loan_payment
+    # result["monthly_loan_payment"] = monthly_loan_payment
 
     return result
 
@@ -373,7 +366,6 @@ async def main():
                 row.append(calculations.get("annual_net_cashflow"))
                 row.append(calculations.get("return_on_investment"))
                 await writer.writerow(row)
-
 
 
 if __name__ == "__main__":
