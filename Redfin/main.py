@@ -12,13 +12,14 @@ The scenario of the script is the following:
     1. Ask a city from user.
     2. Ask other optional filters.
     3. Open automated browser and make a request with set filters.
-    4. After a browser got a page of filtered results the script extracts all necessesary urls 
+    4. After a browser got a page of filtered results the script extracts all necessesary urls
         to parse the rest of content recursively.
     5. As soon as the script found all links with potential data it makes request there and extract the data from HTML.
     6. After the data is extracted the script writes it into CSV file which calls data.csv and saves it next to itself.
 
 
-The price for Zip Code and Total # of Bedrooms is based on relations.py file which was generated according to provided price list.
+# of Bedrooms is based on relations.py file which was generated according to provided price list.
+The price for Zip Code and Total
 '''
 import os
 import time
@@ -32,115 +33,58 @@ import numpy_financial as npf
 from aiocsv import AsyncWriter
 from bs4 import BeautifulSoup as bs
 
-from selenium import webdriver
-from selenium.common import exceptions
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
-
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-
-
 from relations import prices
 
 
-
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:88.0) Gecko/20100101 Firefox/88.0",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Accept-Language": "en-US,en;q=0.5",
+    "Connection": "keep-alive",
+    "Referer": "https://www.redfin.com/",
+    "Upgrade-Insecure-Requests": "1",
     "Content-Type": "text/plain;charset=UTF-8",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9"
+    "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:88.0) Gecko/20100101 Firefox/88.0",
+    "Cookie": '''RF_CORVAIR_LAST_VERSION=368.0.0; RF_BROWSER_ID=uJN8rqjGRtqmOEz08L2_Qg; RF_BID_UPDATED=1; sortOrder=1; sortOption=special_blend; AKA_A2=A; AMP_TOKEN=%24NOT_FOUND; FEED_COUNT=0%3At; _uetsid=102ac700bdd911eb9e48ad579aa122bb; _uetvid=a21dd430b60411eba172e70ab6a3901d; _dc_gtm_UA-294985-1=1; audS=t'''
 }
 
 
 PATH = pathlib.Path(__file__).parent
 
 
-class Authorization(object):
-
-    def __init__(self, url):
-        super(Authorization, self).__init__()
-        self.url = url
-        self.url_split = url
-
-        self.options = Options()
-        self.options.add_argument("disable-infobars")
-        self.options.add_argument("--disable-extensions")
-        self.options.add_argument('user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36')
-        self.options.add_argument("start-fullscreen")
-
-    def start_browser(self) -> str:
-        chromedriver_path = str(PATH) + '/chromedriver_mac64/chromedriver'
-
-        try:
-            self.browser = webdriver.Chrome(options=self.options, executable_path=chromedriver_path)
-            time.sleep(3)
-            self.browser.get(self.url)
-            return 1
-        except:
-            try:
-                self.chrome_service = Service(ChromeDriverManager().install())
-                self.browser = webdriver.Chrome(options=self.options, service=self.chrome_service)
-                time.sleep(3)
-                self.browser.get(self.url)
-                return 1
-            except:
-                return 0
-
-
-
-    def get_filtered_pages(self, filters):
-        search_from = self.browser.find_element(By.ID, "search-box-input")
-
-        search_button = self.browser.find_element(By.CLASS_NAME, "inline-block.SearchButton.clickable.float-right")
-
-        search_from.click()
-        time.sleep(1)
-
-        search_from.send_keys(filters.get('city'))
-        time.sleep(1)
-
-        search_button.click()
-        time.sleep(4)
-
-        url = self.browser.current_url + '/filter/property-type=multifamily'
-
-        if filters.get('max-price'):
-            max_price = filters.get('max-price')
-            url += f',max-price={max_price}'
-
-        if filters.get('min-beds'):
-            min_beds = filters.get('min-beds')
-            url += f',min-beds={min_beds}'
-
-        if filters.get('min-price'):
-            min_price = filters.get('min-price')
-            url += f',min-price={min_price}'
-
-        self.browser.get(url)
-
-        try:
-            pagination = self.browser.find_element(By.CLASS_NAME, "PagingControls")
-            pagination_links = pagination.find_elements(By.TAG_NAME, "a")
-
-            return (link.get_attribute("href") for link in pagination_links)
-        except:
-            return (url,)
-
-
-    def quit_bowser(self):
-        return self.browser.quit()
-
-
 class DataMiner:
+    def __init__(self, url) -> None:
+        self.url = url
+        
+
     async def get_data(self, url):
-        await asyncio.sleep(2.5)
+        await asyncio.sleep(2)
         async with aiohttp.ClientSession(headers=HEADERS) as session:
             try:
                 request = await session.get(url)
                 html = await request.text()
-                return html
-            except (aiohttp.ClientError, aiohttp.http_exceptions.HttpProcessingError):
+                if 'Oops!  It looks like' in html:
+                    print('----- Your IP has been blocked! -----')
+                    return []
+                else:
+                    return html
+            except (aiohttp.ClientError, aiohttp.http_exceptions.HttpProcessingError) as e:
+                print('----- Inernet connection has been lost! -----')
                 return []
+
+
+    async def get_pages(self):
+        html = await self.get_data(self.url)
+
+        if html:
+            soup = bs(html, 'html.parser')
+            pagination_buttons = soup.find('div', class_='PagingControls')
+
+            if pagination_buttons:
+                links = ['https://www.redfin.com'+link["href"] for link in pagination_buttons.find_all('a')]
+                return links
+            else:
+                return (self.url,)
 
 
     def get_each_property_url(self, html):
@@ -153,7 +97,8 @@ class DataMiner:
                 if offer.a:
                     href = offer.a["href"]
                     yield 'https://www.redfin.com' + href
-            
+
+
 
     async def get_property_info(self, url):
         data = await self.get_data(url)
@@ -162,7 +107,8 @@ class DataMiner:
             temp_view_data = []
 
             soup = bs(data, 'html.parser')
-            interior = soup.find('div', class_='propertyDetailContainer-content useColumnCount')
+            interior = soup.find(
+                'div', class_='propertyDetailContainer-content useColumnCount')
 
             if not interior:
                 return [0 for _ in range(13)]
@@ -173,13 +119,12 @@ class DataMiner:
             zip_code = soup.find('div', class_='dp-subtext')
             price = soup.find('div', class_='statsValue')
 
-
             if address:
                 temp_view_data.append(address.text)
 
             if zip_code:
                 zip_code = zip_code.text.split()[-1]
-            
+
             if price:
                 price = int(price.text.split('$')[-1].replace(',', ''))
 
@@ -199,8 +144,8 @@ class DataMiner:
                         if 'Bedrooms' in total.span.text:
                             total_bedrooms = total.span.text.split()[-1]
                             temp_view_data.append(total_bedrooms)
-                            temp_view_data.append(prices.get(zip_code).get(int(total_bedrooms)))
-
+                            temp_view_data.append(prices.get(
+                                zip_code).get(int(total_bedrooms)))
 
                 if 'Unit #' in frame_header.text:
                     unit_info = frame.ul.find_all('li')
@@ -209,7 +154,8 @@ class DataMiner:
                         if 'Bedroom' in unit.text:
                             bedrooms_per_unit = unit.text.split()[-1]
                             temp_view_data.append(bedrooms_per_unit)
-                            temp_view_data.append(prices.get(zip_code).get(int(bedrooms_per_unit)))
+                            temp_view_data.append(prices.get(
+                                zip_code).get(int(bedrooms_per_unit)))
 
             for _ in range(14 - len(temp_view_data)):
                 temp_view_data.append(0)
@@ -220,50 +166,25 @@ class DataMiner:
                 if i:
                     temp_view_data_updated.append(i)
                 else:
-                        temp_view_data_updated.append(0)
+                    temp_view_data_updated.append(0)
 
             if temp_view_data_updated and len(temp_view_data_updated) > 1:
-               return temp_view_data_updated
+                return temp_view_data_updated
 
-        return [0 for _ in range(15)] 
+        return [0 for _ in range(15)]
 
-
-
-def set_filters():
-    FILTER_FIELDS = {}
-
-    CITY = input('What CITY You are looking for (Leave empty and Press Enter -> to skip): ')
-    MIN_PRICE = input('What MINIMAL PRICE You are looking for (Leave empty and Press Enter -> to skip): ')
-    MAX_PRICE = input('What MAXIMUM PRICE You are looking for (Leave empty and Press Enter -> to skip): ')
-    MIN_BEDS = input('What MINIMUM BEDS You are looking for (Leave empty and Press Enter -> to skip): ')
-
-
-    if CITY:
-        FILTER_FIELDS["city"] = CITY
-
-    if MIN_PRICE:
-        FILTER_FIELDS["min-price"] = MIN_PRICE
-
-    if MAX_PRICE:
-        FILTER_FIELDS["max-price"] = MAX_PRICE
-
-    if MIN_BEDS:
-        FILTER_FIELDS["min-beds"] = MIN_BEDS
-
-    return FILTER_FIELDS
 
 
 def net_cashflow_calculator(data):
     result = {}
 
-    interest_rate = 0.0425 # C5
-    tax_rate = 0.01 # E2
-    duration_of_loan_in_months = 360 # C6
-    monthly_property_insurance = 150 # E5
-    down_payment_percent = 0.2 # E7
-    property_managment = 0.05 # E8
-    total_price = data.get('total_price') # C4
-
+    interest_rate = 0.0425  # C5
+    tax_rate = 0.01  # E2
+    duration_of_loan_in_months = 360  # C6
+    monthly_property_insurance = 150  # E5
+    down_payment_percent = 0.2  # E7
+    property_managment = 0.05  # E8
+    total_price = data.get('total_price')  # C4
 
     unit_prices = []
 
@@ -279,24 +200,31 @@ def net_cashflow_calculator(data):
     if data.get('unit_4'):
         unit_prices.append(data.get('unit_4'))
 
-
-    loan_amount = round((1-down_payment_percent) * total_price, 2) # C7
-    down_payment_summ = round(down_payment_percent * total_price, 2) # C8
-    principal_and_interest = round(npf.pmt(interest_rate/12, duration_of_loan_in_months, -loan_amount, 2), 1) # E4
-    monthly_property_tax_amount = round(total_price * tax_rate / 12, 2) # E6
+    loan_amount = round((1-down_payment_percent) * total_price, 2)  # C7
+    down_payment_summ = round(down_payment_percent * total_price, 2)  # C8
+    principal_and_interest = round(
+        npf.pmt(interest_rate/12, duration_of_loan_in_months, -loan_amount, 2), 1)  # E4
+    monthly_property_tax_amount = round(total_price * tax_rate / 12, 2)  # E6
     # pmt_summ = round((loan_amount * interest_rate) / 12, 7) # E10
-    gross_rent_monthly = sum(unit_prices) # C11
-    property_management_summ = property_managment * gross_rent_monthly # C19
+    gross_rent_monthly = sum(unit_prices)  # C11
+    property_management_summ = property_managment * gross_rent_monthly  # C19
     # interest_only_loan_summ = sum(unit_prices[:3]) - property_management_summ - monthly_property_tax_amount - monthly_property_insurance - pmt_summ # C9
     # gross_rent_annual = gross_rent_monthly * 12 # D11
-    monthly_net_cashflow = round(gross_rent_monthly - property_management_summ - principal_and_interest - monthly_property_insurance - monthly_property_tax_amount, 2)# C20
-    annual_net_cashflow = round(monthly_net_cashflow * 12, 2) # C21
+    monthly_net_cashflow = round(gross_rent_monthly - property_management_summ -
+                                 principal_and_interest - monthly_property_insurance - monthly_property_tax_amount, 2)  # C20
+    annual_net_cashflow = round(monthly_net_cashflow * 12, 2)  # C21
     # interest_only_loan_percent = round((interest_only_loan_summ * 12) / down_payment_summ, 2)
-    total_invested = int(down_payment_summ + 0) # E 20
+    total_invested = int(down_payment_summ + 0)  # E 20
     # pay_off_in_years = round(down_payment_summ / annual_net_cashflow, 2) # E 21
-    return_on_investment = int(round(annual_net_cashflow / total_invested, 2) * 100) # E 13
-    # monthly_loan_payment = monthly_property_insurance + principal_and_interest + monthly_property_tax_amount # D 2
+    
+    if total_invested:
+        return_on_investment = int(
+            round(annual_net_cashflow / total_invested, 2) * 100)  # E 13
+    else:
+        return_on_investment = 0
+        
 
+    # monthly_loan_payment = monthly_property_insurance + principal_and_interest + monthly_property_tax_amount # D 2
 
     # result["loan_amount"] = loan_amount
     # result["down_payment_summ"] = down_payment_summ
@@ -317,56 +245,46 @@ def net_cashflow_calculator(data):
     return result
 
 
-async def main():
-    FILTER_FIELDS = set_filters()
+async def main(url):
+    dtmnr = DataMiner(url)
+    pages = await dtmnr.get_pages()
 
-    auth = Authorization('https://www.redfin.com')
-    browser = auth.start_browser()
-
-    if not browser:
-        print('---------------Browser is not found or ChromeDriver is not installed!---------------')
-        return auth.quit_bowser()
-
-    try:
-        pages = auth.get_filtered_pages(FILTER_FIELDS)
-    except:
-        print('--------- Check internet connection and try again! ---------')
-        return auth.quit_bowser()
+    if pages:
+        page_views = await asyncio.gather(*(dtmnr.get_data(page) for page in pages))
+        pagination_urls = (dtmnr.get_each_property_url(page_view) for page_view in page_views)
 
 
-    dtmnr = DataMiner()
+        async with aiofiles.open(
+                file=str(PATH) + "/data.csv", mode="w",
+                encoding="utf-8", newline="") as afp:
 
-    page_views = await asyncio.gather(*(dtmnr.get_data(page) for page in pages))
-    pagination_urls = (dtmnr.get_each_property_url(page_view) for page_view in page_views)
+            writer = AsyncWriter(afp, dialect="unix")
+            await writer.writerow(["PropertyAddress", "ZipCode", "TotalPrice", "UnitsTotal", "BedroomsTotal", "PriceForTotalBedrooms", "Unit1", "PriceForUnit1",  "Unit2", "PriceForUnit2",  "Unit3", "PriceForUnit3",  "Unit4", "PriceForUnit4", "MonthlyNetCashflow", "AnnualNetCashflow", "ReturnOnInvestment"])
 
-    auth.quit_bowser()
+            for pagination_url in pagination_urls:
+                print('----- Please Wait... The program collects the data! -----')
+                await asyncio.sleep(1.8)
+                rows = await asyncio.gather(*(dtmnr.get_property_info(url) for url in tuple(url for url in pagination_url)))
+                for row in rows:
+                    array = {
+                        "total_price": row[2]
+                    }
 
-    async with aiofiles.open(
-        file=str(PATH) + "/data.csv", mode="w", 
-        encoding="utf-8", newline="") as afp:
-        
-        writer = AsyncWriter(afp, dialect="unix")
-        await writer.writerow(["PropertyAddress", "ZipCode", "TotalPrice", "UnitsTotal", "BedroomsTotal", "PriceForTotalBedrooms", "Unit1", "PriceForUnit1",  "Unit2", "PriceForUnit2",  "Unit3", "PriceForUnit3",  "Unit4", "PriceForUnit4", "MonthlyNetCashflow", "AnnualNetCashflow", "ReturnOnInvestment"])
+                    array["unit_1"] = row[7]
+                    array["unit_2"] = row[9]
+                    array["unit_3"] = row[11]
+                    array["unit_4"] = row[13]
 
-        for pagination_url in pagination_urls:
-            await asyncio.sleep(1.4)
-            rows = await asyncio.gather(*(dtmnr.get_property_info(url) for url in tuple(url for url in pagination_url)))
-            for row in rows:
-                array = {
-                    "total_price": row[2]
-                }
+                    calculations = net_cashflow_calculator(array)
+                    row.append(calculations.get("monthly_net_cashflow"))
+                    row.append(calculations.get("annual_net_cashflow"))
+                    row.append(calculations.get("return_on_investment"))
+                    await writer.writerow(row)
 
-                array["unit_1"] = row[7]
-                array["unit_2"] = row[9]
-                array["unit_3"] = row[11]
-                array["unit_4"] = row[13]
-
-                calculations = net_cashflow_calculator(array)
-                row.append(calculations.get("monthly_net_cashflow"))
-                row.append(calculations.get("annual_net_cashflow"))
-                row.append(calculations.get("return_on_investment"))
-                await writer.writerow(row)
+        return 1
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    url = input('Please insert URL: ')
+    if asyncio.run(main(url)):
+        print('----- Success, Check data.csv file!')
