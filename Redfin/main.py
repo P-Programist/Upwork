@@ -9,20 +9,16 @@ Please check whether You have Mozila Firefox or Google Chrome on your Computer.
 The script depends on three major libraries: Selenium, BeautifulSoup, WebdriverManager.
 
 The scenario of the script is the following:
-    1. Ask a city from user.
-    2. Ask other optional filters.
-    3. Open automated browser and make a request with set filters.
-    4. After a browser got a page of filtered results the script extracts all necessesary urls
-        to parse the rest of content recursively.
-    5. As soon as the script found all links with potential data it makes request there and extract the data from HTML.
-    6. After the data is extracted the script writes it into CSV file which calls data.csv and saves it next to itself.
+    1. Ask a link from a user.
+    2. The next step is to make request according to the set filters and get all pagination urls as well.
+    3. As soon as the script found all links with potential data it makes request there and extract the data from HTML.
+    4. After the data is extracted the script writes it into CSV file which calls data.csv and saves it next to itself.
 
 
 # of Bedrooms is based on relations.py file which was generated according to provided price list.
 The price for Zip Code and Total
 '''
-import os
-import time
+
 import asyncio
 import aiohttp
 import pathlib
@@ -265,22 +261,26 @@ async def main(url):
                 print('----- Please Wait... The program collects the data! -----')
                 await asyncio.sleep(1.8)
                 rows = await asyncio.gather(*(dtmnr.get_property_info(url) for url in tuple(url for url in pagination_url)))
-                for row in rows:
-                    array = {
-                        "total_price": row[2]
-                    }
 
-                    array["unit_1"] = row[7]
-                    array["unit_2"] = row[9]
-                    array["unit_3"] = row[11]
-                    array["unit_4"] = row[13]
+                if rows:
+                    for row in rows:
+                        array = {
+                            "total_price": row[2]
+                        }
 
-                    calculations = net_cashflow_calculator(array)
-                    row.append(calculations.get("monthly_net_cashflow"))
-                    row.append(calculations.get("annual_net_cashflow"))
-                    row.append(calculations.get("return_on_investment"))
-                    await writer.writerow(row)
+                        array["unit_1"] = row[7]
+                        array["unit_2"] = row[9]
+                        array["unit_3"] = row[11]
+                        array["unit_4"] = row[13]
 
+                        calculations = net_cashflow_calculator(array)
+                        row.append(calculations.get("monthly_net_cashflow"))
+                        row.append(calculations.get("annual_net_cashflow"))
+                        row.append(calculations.get("return_on_investment"))
+                        await writer.writerow(row)
+                else:
+                    print('----- There is no information with these filters! -----')
+                    return 0
         return 1
 
 
