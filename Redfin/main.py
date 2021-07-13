@@ -20,6 +20,7 @@ The price for Zip Code and Total
 '''
 
 import asyncio
+import re
 import aiohttp
 import pathlib
 import aiofiles
@@ -98,7 +99,6 @@ class DataMiner:
 
     async def get_property_info(self, url):
         data = await self.get_data(url)
-
         if data:
             temp_view_data = []
 
@@ -263,11 +263,11 @@ async def main(url):
                 rows = await asyncio.gather(*(dtmnr.get_property_info(url) for url in tuple(url for url in pagination_url)))
 
                 if rows:
+                    print(rows)
                     for row in rows:
                         array = {
                             "total_price": row[2]
                         }
-
                         array["unit_1"] = row[7]
                         array["unit_2"] = row[9]
                         array["unit_3"] = row[11]
