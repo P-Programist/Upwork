@@ -20,7 +20,7 @@ class Formulas(object):
         self.mezzanine_financing = True  # J26
 
         self.zip_code = self.data.get("zip_code")  # C7
-        self.total_rooms = sum([self.rooms.get(room) for room in self.rooms])  # C29
+        self.total_rooms = sum([tp[1] for tp in self.rooms])  # C29
 
         # Sale Assumptions
         self.sale_period = 48  # C15
@@ -200,7 +200,8 @@ class Formulas(object):
 
     def rent_roll_assumptions(self):
         total_price = 0
-        for total_units, unit_amount in self.rooms.items():
+        for pair in self.rooms:
+            total_units, unit_amount = pair
             total_price += pr.STATIC_ROOM_PRICE.get(total_units) * unit_amount
         return total_price
 
@@ -350,3 +351,6 @@ def xirr(cashflows, guess=0.1):
     except Exception as e:
         elgr().error(e)
         return 0
+
+
+

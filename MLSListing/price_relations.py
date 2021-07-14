@@ -1,3 +1,7 @@
+import os
+import pandas as pd
+from static import PATH
+
 TABLE = {
     "02351": {
         "SRO": 775,
@@ -2272,11 +2276,23 @@ TABLE = {
 }
 
 
-STATIC_ROOM_PRICE = {
-    0: 2750,
-    1: 2542,
-    2: 1800,
-    3: 3000,
-    4: 2500,
-    5: 2700,
-}
+def get_rent_roll_assumptions_prices():
+    files = os.listdir(PATH)
+    excel_file = [f for f in files if "xlsx" in f]
+    if len(excel_file) > 1:
+        print('There are more than ONE ".xlsx" file in the directory!')
+        exit()
+
+    excel_file = excel_file[0]
+
+    data = pd.read_excel(PATH + "/" + excel_file)
+    df = pd.DataFrame(data, columns=["Unnamed: 3"])
+    prices = df[28:34].values
+    return {i: prices[i][0] for i in range(len(prices))}
+
+
+try:
+    STATIC_ROOM_PRICE = get_rent_roll_assumptions_prices()
+except FileNotFoundError:
+    print('Please put ".xlsx" file in the MLSListing directory.')
+    exit()
