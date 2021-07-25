@@ -127,7 +127,6 @@ def get_number_of_pages(html):
 
 
 def main():
-    ilgr.info(f"Test")
     crawler = Crawler("https://chaturbate.com")
 
     current_date = datetime.datetime.strftime(datetime.datetime.now(), "%Y-%m-%d_%H:%M")
