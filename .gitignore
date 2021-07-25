@@ -4,6 +4,8 @@ templates/
 *.py[cod]
 *$py.class
 upwork_speech.txt
+Valkenstein
+
 
 # C extensions
 *.so
