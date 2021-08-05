@@ -5,6 +5,8 @@ templates/
 *$py.class
 upwork_speech.txt
 Valkenstein
+Spokeo
+SpokeoOld
 
 
 # C extensions
@@ -18,6 +20,7 @@ constants.py
 *.pdf
 *.txt
 *.bat
+*.sql
 
 
 # Distribution / packaging
