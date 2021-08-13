@@ -7,10 +7,7 @@ CONNECTION = sqlite3.connect(DB_PATH)
 CURSOR = CONNECTION.cursor()
 
 FILENAMES = (
-    'data0.csv','data1.csv',
-    'data2.csv','data3.csv',
-    'data4.csv','data5.csv',
-    'data6.csv'
+    'data0.csv','data1.csv','data2.csv',
 )
 
 INSERT_COLUMNS_ROW = ', '.join(CSV_COLUMNS)
@@ -51,8 +48,7 @@ CREATE TABLE race_results(
     back_s_rate FLOAT DEFAULT 0,
     lay_s_rate FLOAT DEFAULT 0,
 
-    back_probability FLOAT DEFAULT 0,
-    number_of_races INT DEFAULT 1);'''
+    back_probability FLOAT DEFAULT 0);'''
 
 
 def upload_csv(csv_file):
@@ -76,44 +72,98 @@ def drop_table(table_name):
         print('Table %s does not exist!' % table_name.upper())
 
 
-def insert(table_name, columns, horse_names, data=None):
+def insert(table_name, columns, race_types, data=None):
+    current_date = None
     if data:
         for row in data:
-            horse_name = row[7]
+
+            race_date = row[0]
+            race_time = row[1]
+            race_type = row[4]
             position = row[5]
-            if horse_names:
-                if horse_name in horse_names:
+
+            if race_types and current_date == race_date:
+                if race_type in race_types:
                     if position == '1':
                         CURSOR.execute(
                             'UPDATE %s \
-                                SET back_winners = back_winners+1, \
+                                SET \
+                                    back_winners = back_winners + 1, \
                                     back_win = (bsp-1) * stake, \
-                                        lay_win = lay_win + stake, \
-                                            number_of_races=number_of_races+1  \
-                                                WHERE horse_name = \'%s\';' % (table_name, horse_name.replace('\'', '"')))
+                                    lay_win = -(bsp-1) * stake \
+                                WHERE race_type = \'%s\' AND date = \'%s\' AND time = \'%s\';' % (table_name, race_type.replace('\'',''), race_date, race_time))
+
+                        CONNECTION.commit()
+
+                        CURSOR.execute(
+                            'UPDATE %s \
+                                SET \
+                                    back_roi = back_win / back_winners, \
+                                    lay_roi = lay_win / lay_winners, \
+                                    back_s_rate = (back_winners / (back_winners + lay_winners)) * 100, \
+                                    lay_s_rate = (lay_winners / (back_winners + lay_winners)) * 100, \
+                                    back_probability = (back_winners / (back_winners + lay_winners)) * 100 \
+                                WHERE race_type = \'%s\' AND date = \'%s\' AND time = \'%s\';' % (table_name, race_type.replace('\'',''), race_date, race_time))
+
+                        CONNECTION.commit()
                     else:
                         CURSOR.execute(
                             'UPDATE %s \
-                                SET lay_winners = lay_winners+1, \
+                                SET \
+                                    lay_winners = lay_winners + 1, \
                                     back_win = back_win - stake, \
-                                        lay_win = -(bsp-1) * stake, \
-                                            number_of_races=number_of_races+1 \
-                                                WHERE horse_name = \'%s\';' % (table_name, horse_name.replace('\'', '"')))
+                                    lay_win = lay_win + stake \
+                                WHERE race_type = \'%s\' AND time = \'%s\' AND time = \'%s\';' % (table_name, race_type.replace('\'',''), race_date, race_time))
+
+                        CONNECTION.commit()
+                        
+                        CURSOR.execute(
+                            'UPDATE %s \
+                                SET \
+                                    back_roi = back_win / back_winners, \
+                                    lay_roi = lay_win / lay_winners, \
+                                    back_s_rate = (back_winners / (back_winners + lay_winners)) * 100, \
+                                    lay_s_rate = (lay_winners / (back_winners + lay_winners)) * 100, \
+                                    back_probability = (back_winners / (back_winners + lay_winners)) * 100 \
+                                WHERE race_type = \'%s\' AND time = \'%s\' AND time = \'%s\';' % (table_name, race_type.replace('\'',''), race_date, race_time))
+                        CONNECTION.commit()
                 else:
                     CURSOR.execute("INSERT INTO %s (%s) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);" % (
                         table_name, columns), row)
+
+                    CONNECTION.commit()
+        
             else:
                 if position == '1':
-                    row.extend([1, 1, 0, (float(row[12]) - 1) * 1, 1])
+                    back_win_formula = (float(row[12]) - 1) * 1
+                    lay_win_formula = -(float(row[12]) - 1) * 1
+                    back_roi = back_win_formula
+                    lay_roi = lay_win_formula
+                    back_s_rate = 100
+                    lay_s_rate = 0
+                    back_probability = back_s_rate
+
+                    row.extend([1, 0, back_win_formula, lay_win_formula, back_roi, lay_roi, back_s_rate, lay_s_rate, back_probability])
                 else:
-                    row.extend([1, 0, 1, -1, -(float(row[12]) - 1) * 1])
+                    back_win_formula = -1
+                    lay_win_formula = 1
+                    back_roi = back_win_formula
+                    lay_roi = lay_win_formula
+                    back_s_rate = 0
+                    lay_s_rate = 100
+                    back_probability = back_s_rate
 
-                updated_columns = columns + ', stake, back_winners, lay_winners, back_win, lay_win'
+                    row.extend([0, 1, back_win_formula, lay_win_formula, back_roi, lay_roi, back_s_rate, lay_s_rate, back_probability])
 
-                CURSOR.execute("INSERT INTO %s (%s) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);" % (
+                updated_columns = columns + ', back_winners, lay_winners, back_win, lay_win, back_roi, lay_roi, back_s_rate, lay_s_rate, back_probability'
+
+                CURSOR.execute("INSERT INTO %s (%s) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);" % (
                         table_name, updated_columns), row)
-                
-        CONNECTION.commit()
+
+                CONNECTION.commit()
+            current_date = race_date
+
+        
 
 
 def select(column_name, table_name, conditions=None):
@@ -126,26 +176,21 @@ def select(column_name, table_name, conditions=None):
     return result.fetchall()
 
 
-def query(cmd):
-    print(cmd)
-    recs = CURSOR.execute(cmd)
-    return recs.fetchall()
+def main():
+    drop_table('race_results')
+    create('race_results')
 
-if __name__ == "__main__":
-    # drop_table('race_results')
-    # create('race_results')
     for filename in FILENAMES:
-        csv_file = open(PATH + '/' + filename)
+        csv_file = open(PATH + '/csv_data/' + filename)
 
         data = upload_csv(csv_file)
-        horse_names = [name[0] for name in select('horse_name', 'race_results')]
-        insert('race_results', INSERT_COLUMNS_ROW, horse_names, data)
+        race_types = [name[0] for name in select('race_type', 'race_results')]
+        insert('race_results', INSERT_COLUMNS_ROW, race_types, data)
         csv_file.close()
 
-    
-
-    # result = select('horse_name', 'race_results',)
-    # for row in result:
-    #     print(row)
-
     CURSOR.close()
+
+if __name__ == "__main__":
+    main()
+
+    

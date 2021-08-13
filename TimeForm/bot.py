@@ -98,24 +98,43 @@ class SiteConnector:
                 for title_link in title_links:
                     url = 'https://www.timeform.com' + title_link['href']
                     
-                    race_title_text = title_link.text
+                    race_title_text = title_link.text.upper()
+                    cleaned_race_definition_word_list = race_title_text.split()
 
-                    first_breaket_index = race_title_text.find('(')
-                    cleaned_race_definition_word_list = race_title_text[:first_breaket_index].split()
-                    race_definition_text = cleaned_race_definition_word_list[-2:]
+                    if 'HURDLE' in cleaned_race_definition_word_list:
+                        race_type_name = 'OTHER HURDLE'
+                        if 'HANDICAP' in cleaned_race_definition_word_list:
+                            race_type_name = 'HANDICAP HURDLE'
+                        elif 'MAIDEN' in cleaned_race_definition_word_list:
+                            race_type_name = 'MAIDEN HURDLE'
+                        elif 'JUVENILE' in cleaned_race_definition_word_list:
+                            race_type_name = 'JUVENILE HURDLE'
+                        elif 'NOVICES' in cleaned_race_definition_word_list:
+                            race_type_name = 'NOVICES HURDLE'
 
-                    if 'HANDICAP' in race_definition_text or 'HANDICAP' in race_title_text:
+                    elif 'STAKES' in cleaned_race_definition_word_list:
+                        race_type_name = 'OTHER FLAT'
+                        if 'MAIDEN' in cleaned_race_definition_word_list:
+                            race_type_name = 'MAIDEN STAKES'
+                        elif 'NOVICE' in cleaned_race_definition_word_list:
+                            race_type_name = 'NOVICE STAKES'
+                        elif 'SELLING' in cleaned_race_definition_word_list:
+                            race_type_name = 'SELLING STAKES'
+
+                    elif 'HANDICAP' in cleaned_race_definition_word_list:
                         race_type_name = 'HANDICAP'
+                        if 'CHASE' in cleaned_race_definition_word_list:
+                            race_type_name = 'CHASE HANDICAP'
+                        elif 'SELLING' in cleaned_race_definition_word_list:
+                            race_type_name = 'SELLING HANDICAP'
                     else:
-                        race_type_name = ' '.join(race_definition_text)
+                        race_type_name = ' '.join(cleaned_race_definition_word_list[-3:-1])
 
-                    race_links.append((url, race_type_name))
+                    race_links.append((url, race_type_name.replace('\'', '')))
 
         return race_links
 
 
-
-      
 
 
 class RaceScraper:
@@ -175,11 +194,12 @@ class RaceScraper:
         date_and_time_section = soup.find(
             "span", class_='rp-title-course-name')
 
+
         if date_and_time_section:    
             self.date_and_time["track"] = date_and_time_section.text.title().strip()
         else:
             title_text = soup.find('h1', class_='rp-title').text
-            self.date_and_time["track"] = ' '.join(title_text.split()[:-5]).title().strip()
+            self.date_and_time["track"] = ' '.join(title_text.split()[:-1]).title().strip()
 
 
         self.date_and_time["distance"] = distance_of_the_race.split(
@@ -282,7 +302,7 @@ if __name__ == "__main__":
 
     engine = cloudscraper.create_scraper()
 
-    count = 12
+    count = 0
 
     for url in static.URLS:
         sc = SiteConnector(url)
@@ -293,7 +313,7 @@ if __name__ == "__main__":
 
 
         with open(
-            file=static.PATH + "/data%s.csv" % count,
+            file=static.PATH + "/csv_data/data%s.csv" % count,
             mode="w",
             encoding="utf-8",
             newline="",
@@ -312,6 +332,6 @@ if __name__ == "__main__":
                 # print(result)
                 if result:
                     writer.writerows(result)
-                time.sleep(2)
+                time.sleep(1)
         count += 1
 

@@ -3,28 +3,10 @@ import pathlib
 PATH = str(pathlib.Path(__file__).parent)
 
 URLS = (
-    'https://www.timeform.com/horse-racing/results/2021-07-19',
-    'https://www.timeform.com/horse-racing/results/2021-07-18',
-    'https://www.timeform.com/horse-racing/results/2021-07-19',
-    'https://www.timeform.com/horse-racing/results/2021-07-20',
-    'https://www.timeform.com/horse-racing/results/2021-07-21',
-    'https://www.timeform.com/horse-racing/results/2021-07-22',
-
-    'https://www.timeform.com/horse-racing/results/2021-07-23',
-    'https://www.timeform.com/horse-racing/results/2021-07-24',
-    'https://www.timeform.com/horse-racing/results/2021-07-25',
-    'https://www.timeform.com/horse-racing/results/2021-07-26',
-    'https://www.timeform.com/horse-racing/results/2021-07-27',
-    'https://www.timeform.com/horse-racing/results/2021-07-28',
-
-    'https://www.timeform.com/horse-racing/results/2021-07-29',
-    'https://www.timeform.com/horse-racing/results/2021-07-30',
-    'https://www.timeform.com/horse-racing/results/2021-07-31',
-    'https://www.timeform.com/horse-racing/results/2021-08-01',
-    'https://www.timeform.com/horse-racing/results/2021-08-02',
-    'https://www.timeform.com/horse-racing/results/2021-08-03',
-    'https://www.timeform.com/horse-racing/results/2021-08-04',
-    )
+    'https://www.timeform.com/horse-racing/results/2021-08-11',
+    'https://www.timeform.com/horse-racing/results/2021-08-12',
+    'https://www.timeform.com/horse-racing/results/2021-08-13',
+)
 
 HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
@@ -84,7 +66,6 @@ DB_COLUMS = (
 
     "lay_roi",
     "lay_s_rate",
-    "number_of_races"
 )
 
 
@@ -109,5 +90,3 @@ CSV_COLUMNS = (
     "L2B",
     "runners",
 )
-
-STAKE = 1
