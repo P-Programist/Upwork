@@ -7,6 +7,7 @@ PATH = str(pathlib.Path(__file__).parent)
 LOGGER = custom_logger(PATH, "general")
 
 DB_PATH = PATH + '/results.db'
+DB_TABLE_NAME = 'races'
 
 CSV_DATA_DIR = pathlib.Path(PATH + "/csv_data")
 
@@ -111,7 +112,7 @@ DB_COLUMS = (
 
 
 CREATE_RACE_RESULT_TABLE_QUERY = '''
-CREATE TABLE race_results(
+CREATE TABLE races(
     date VARCHAR(20),
     time VARCHAR(10),
     track VARCHAR(30),

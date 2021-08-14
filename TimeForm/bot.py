@@ -1,6 +1,7 @@
 import csv
 import time
 import datetime as dt
+from random import choice
 
 import cloudscraper
 from bs4 import BeautifulSoup as BS
@@ -43,7 +44,7 @@ class SiteConnector:
             html_page_request = self.engine.get(
                 url=url,
                 headers=settings.HEADERS,
-                cookies=self.cookies,
+                cookies=self.cookies
             )
         except CloudConnectionError:
             settings.LOGGER.info(
@@ -58,15 +59,10 @@ class SiteConnector:
             "HTML page could not be fetched because of the response %d"
             % html_page_request.status_code
         )
-        exit()
-        # return 0
+        time.sleep(10)
+        return 0
 
     def get_race_venues(self, html):
-        if not html:
-            settings.LOGGER.error(
-                "Could not extract links from %s HTML" % self.url
-            )
-            return []
         soup = BS(html, "html.parser")
 
         race_results_window = soup.find("section", attrs={"id": "archiveFormList"})
@@ -149,9 +145,7 @@ class RaceScraper:
 
     def get_race_datetime(self):
         if not self.html:
-            settings.LOGGER.error(
-                "Could not scrape %s because of broken HTML" % self.url
-            )
+            settings.LOGGER.error("Could not scrape %s because of broken HTML" % self.url)
             return []
 
         soup = BS(self.html, "html.parser")
@@ -212,11 +206,6 @@ class RaceScraper:
 
 
     def get_race_info_after(self) -> dict:
-        if not self.html:
-            settings.LOGGER.error(
-                "Could not scrape %s because of broken HTML" % self.url
-            )
-            return []
         soup = BS(self.html, "html.parser")
 
         main_window = soup.find("div", attrs={"id": "ReportBody"})
@@ -291,7 +280,9 @@ class RaceScraper:
 
 
     def __call__(self):
-        self.get_race_datetime()
+        if not self.get_race_datetime():
+            return self.race_data
+
         self.get_race_info_after()
         self.race_data.sort(key=lambda x: x[-7], reverse=True)
 
@@ -305,7 +296,7 @@ def main():
     engine = cloudscraper.create_scraper()
 
     if CSV_DATA:
-        with open(file=PATH + "/csv_data/data.csv", mode="a", encoding="utf-8") as afp:
+        with open(file=PATH + "/csv_data/raw_data.csv", mode="a", encoding="utf-8") as afp:
             writer = csv.writer(afp, dialect="unix")
             writer.writerow(settings.DB_COLUMS)
 
@@ -314,8 +305,12 @@ def main():
                 site_connector.get_cookies()
 
                 html = site_connector.get_html_page(site_connector.url)
-                all_race_urls = site_connector.get_race_venues(html)
 
+                if not html:
+                    settings.LOGGER.error("Could not scrape %s because of broken HTML" % url)
+                    continue
+                
+                all_race_urls = site_connector.get_race_venues(html)
 
                 for r_url in all_race_urls:
                     print(r_url[0],r_url[1])
@@ -325,8 +320,8 @@ def main():
 
                     if result:
                         writer.writerows(result)
-                    time.sleep(3)
-
+                    time.sleep(5)
+                time.sleep(5)
 
 if __name__ == "__main__":
     main()
