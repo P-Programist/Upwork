@@ -1,60 +1,24 @@
+import os
 import csv
 import sqlite3
-from static import PATH, CSV_COLUMNS
+from settings import PATH, DB_COLUMS, pathlib, CREATE_RACE_RESULT_TABLE_QUERY, DB_PATH
 
-DB_PATH = PATH + '/results.db'
+
 CONNECTION = sqlite3.connect(DB_PATH)
 CURSOR = CONNECTION.cursor()
 
-FILENAMES = (
-    'data0.csv','data1.csv','data2.csv',
-)
 
-INSERT_COLUMNS_ROW = ', '.join(CSV_COLUMNS)
+INSERT_COLUMNS_ROW = ', '.join(DB_COLUMS)
 
-
-CREATE_RACE_RESULT_TABLE_QUERY = '''
-CREATE TABLE race_results(
-    date VARCHAR(20),
-    time VARCHAR(10),
-    track VARCHAR(30),
-    distance VARCHAR(15),
-    race_type VARCHAR(20),
-    position INT,
-    horse_number INT,
-    horse_name VARCHAR(50),
-    jokey VARCHAR(30),
-    trainer VARCHAR(30),
-    horse_age FLOAT,
-    horse_weight VARCHAR(10),
-    bsp FLOAT,
-    bpsp FLOAT,
-    high FLOAT,
-    low FLOAT,
-    B2L FLOAT,
-    L2B FLOAT,
-    runners INT,
-
-    stake INT DEFAULT 1,
-    back_winners FLOAT DEFAULT 0,
-    lay_winners FLOAT DEFAULT 0,
-
-    back_win FLOAT DEFAULT 0,
-    lay_win FLOAT DEFAULT 0,
-
-    back_roi FLOAT DEFAULT 0,
-    lay_roi FLOAT DEFAULT 0,
-
-    back_s_rate FLOAT DEFAULT 0,
-    lay_s_rate FLOAT DEFAULT 0,
-
-    back_probability FLOAT DEFAULT 0);'''
 
 
 def upload_csv(csv_file):
     reader = csv.reader(csv_file)
-    next(reader)
-    return reader
+    try:
+        next(reader)
+        return reader
+    except StopIteration:
+        return 0
 
 
 def create(table_name):
@@ -143,7 +107,7 @@ def insert(table_name, columns, race_types, data=None):
                     lay_s_rate = 0
                     back_probability = back_s_rate
 
-                    row.extend([1, 0, back_win_formula, lay_win_formula, back_roi, lay_roi, back_s_rate, lay_s_rate, back_probability])
+                    row.extend([1, 1, 0, back_win_formula, lay_win_formula, back_roi, lay_roi, back_s_rate, lay_s_rate, back_probability])
                 else:
                     back_win_formula = -1
                     lay_win_formula = 1
@@ -153,12 +117,10 @@ def insert(table_name, columns, race_types, data=None):
                     lay_s_rate = 100
                     back_probability = back_s_rate
 
-                    row.extend([0, 1, back_win_formula, lay_win_formula, back_roi, lay_roi, back_s_rate, lay_s_rate, back_probability])
+                    row.extend([1, 0, 1, back_win_formula, lay_win_formula, back_roi, lay_roi, back_s_rate, lay_s_rate, back_probability])
 
-                updated_columns = columns + ', back_winners, lay_winners, back_win, lay_win, back_roi, lay_roi, back_s_rate, lay_s_rate, back_probability'
-
-                CURSOR.execute("INSERT INTO %s (%s) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);" % (
-                        table_name, updated_columns), row)
+                CURSOR.execute("INSERT INTO %s (%s) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);" % (
+                        table_name, columns), row)
 
                 CONNECTION.commit()
             current_date = race_date
@@ -180,12 +142,13 @@ def main():
     drop_table('race_results')
     create('race_results')
 
-    for filename in FILENAMES:
-        csv_file = open(PATH + '/csv_data/' + filename)
+    if CSV_DATA:
+        csv_file = open(PATH + '/csv_data/data.csv')
+        csv_reader = upload_csv(csv_file)
 
-        data = upload_csv(csv_file)
         race_types = [name[0] for name in select('race_type', 'race_results')]
-        insert('race_results', INSERT_COLUMNS_ROW, race_types, data)
+        insert('race_results', INSERT_COLUMNS_ROW, race_types, csv_reader)
+
         csv_file.close()
 
     CURSOR.close()

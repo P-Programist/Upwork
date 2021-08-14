@@ -1,10 +1,8 @@
 import logging
-from static import PATH
 
-
-def custom_logger(filename):
+def custom_logger(path, filename):
     logger = logging.getLogger("ManyVidsErrorCrawler")
-    handler = logging.FileHandler(PATH + "/logs/%s.log" % filename)
+    handler = logging.FileHandler(path + "/logs/%s.log" % filename)
     formater = logging.Formatter(
         "%(asctime)s| %(message)s ---> %(lineno)s", "%Y-%m-%d %H:%m"
     )

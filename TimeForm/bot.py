@@ -1,5 +1,4 @@
 import csv
-import json
 import time
 import datetime as dt
 
@@ -7,62 +6,64 @@ import cloudscraper
 from bs4 import BeautifulSoup as BS
 from requests.exceptions import ConnectionError as CloudConnectionError
 
-import static
-from loggers import custom_logger as cl
+import settings
+from settings import PATH, CSV_DATA
 
 
 class SiteConnector:
-    def __init__(self, url) -> None:
+    def __init__(self, url, engine) -> None:
         self.url = url
-        self.cookies = static.COOKIES
+        self.engine = engine
+        self.cookies = settings.COOKIES
 
     def get_cookies(self):
         try:
-            cookie_request = engine.get(
+            cookie_request = self.engine.get(
                 url=self.url,
-                headers=static.HEADERS,
-                cookies=static.COOKIES,
+                headers=settings.HEADERS,
+                cookies=settings.COOKIES,
             )
         except CloudConnectionError:
-            scrap_err.info(
-                "Cookies could not be updated because of the Connection Error, Static Cookies have been used instead"
+            settings.LOGGER.info(
+                "Cookies could not be updated because of the Connection Error, settings Cookies have been used instead"
             )
             return self.cookies
 
         if cookie_request.cookies:
             self.cookies = cookie_request.cookies
-            scrap_err.info("Cookies have been updated")
+            settings.LOGGER.info("Cookies have been updated")
             return cookie_request.cookies
 
-        scrap_err.info("Static Cookies have been used")
+        settings.LOGGER.info("settings Cookies have been used")
 
         return self.cookies
 
     def get_html_page(self, url):
         try:
-            html_page_request = engine.get(
+            html_page_request = self.engine.get(
                 url=url,
-                headers=static.HEADERS,
+                headers=settings.HEADERS,
                 cookies=self.cookies,
             )
         except CloudConnectionError:
-            scrap_err.info(
-                "HTML page could not be fetched because of the Connection Error, Static Cookies have been used instead"
+            settings.LOGGER.info(
+                "HTML page could not be fetched because of the Connection Error, settings Cookies have been used instead"
             )
             return 0
 
         if html_page_request.status_code == 200:
             return html_page_request.text
 
-        cl("errors").info(
+        settings.LOGGER.info(
             "HTML page could not be fetched because of the response %d"
             % html_page_request.status_code
         )
-        return 0
+        exit()
+        # return 0
 
     def get_race_venues(self, html):
         if not html:
-            scrap_err.error(
+            settings.LOGGER.error(
                 "Could not extract links from %s HTML" % self.url
             )
             return []
@@ -70,7 +71,7 @@ class SiteConnector:
 
         race_results_window = soup.find("section", attrs={"id": "archiveFormList"})
         if not race_results_window:
-            scrap_err.warning(
+            settings.LOGGER.warning(
                 "Could not find archiveFormList SECTION window probably because of wrong HTML or there are no races"
             )
             return []
@@ -78,7 +79,7 @@ class SiteConnector:
         result_card_sections = race_results_window.find_all("div", class_='w-results-holder')[1:]
 
         if not result_card_sections:
-            scrap_err.warning(
+            settings.LOGGER.warning(
                 "Could not find Venues probably because of wrong HTML or there are no races"
             )
             return []
@@ -138,17 +139,17 @@ class SiteConnector:
 
 
 class RaceScraper:
-    def __init__(self, url, race_type) -> None:
+    def __init__(self, url, race_type, site_connector) -> None:
         self.url = url
         self.race_data = []
         self.date_and_time = {}
-        self.html = sc.get_html_page(self.url)
+        self.html = site_connector.get_html_page(self.url)
 
         self.race_type = race_type
 
     def get_race_datetime(self):
         if not self.html:
-            scrap_err.error(
+            settings.LOGGER.error(
                 "Could not scrape %s because of broken HTML" % self.url
             )
             return []
@@ -159,7 +160,7 @@ class RaceScraper:
         header_rows = race_header.find_all("tr")
 
         if len(header_rows) < 2:
-            scrap_err.warning(
+            settings.LOGGER.warning(
                 "Could not fetch DATE and TIME from %s" % self.url
             )
             return []
@@ -167,7 +168,7 @@ class RaceScraper:
         race_datetime = header_rows[0].h2.text.split()
 
         if len(race_datetime) != 5:
-            scrap_err.warning(
+            settings.LOGGER.warning(
                 "Could not fetch DATE and TIME from %s" % self.url
             )
             return []
@@ -212,7 +213,7 @@ class RaceScraper:
 
     def get_race_info_after(self) -> dict:
         if not self.html:
-            scrap_err.error(
+            settings.LOGGER.error(
                 "Could not scrape %s because of broken HTML" % self.url
             )
             return []
@@ -221,7 +222,7 @@ class RaceScraper:
         main_window = soup.find("div", attrs={"id": "ReportBody"})
 
         if not main_window:
-            scrap_err.warning(
+            settings.LOGGER.warning(
                 "Could not find ReportBody on %s because of the race did not start yet" % self.url
             )
             return []
@@ -283,7 +284,7 @@ class RaceScraper:
             local_race_data["runners"] = runners
 
             local_race_data.update(self.date_and_time)
-            row = tuple(local_race_data.values())
+            row = list(local_race_data.values())
             self.race_data.append(row[14:] + row[:14])
 
         return local_race_data
@@ -294,44 +295,39 @@ class RaceScraper:
         self.get_race_info_after()
         self.race_data.sort(key=lambda x: x[-7], reverse=True)
 
+        for d_index in range(len(self.race_data)):
+            self.race_data[d_index].append(d_index + 1)
+
         return self.race_data
 
 
-if __name__ == "__main__":
-    scrap_err = cl("general")
-
+def main():
     engine = cloudscraper.create_scraper()
 
-    count = 0
-
-    for url in static.URLS:
-        sc = SiteConnector(url)
-        sc.get_cookies()
-
-        html = sc.get_html_page(sc.url)
-        all_race_urls = sc.get_race_venues(html)
-
-
-        with open(
-            file=static.PATH + "/csv_data/data%s.csv" % count,
-            mode="w",
-            encoding="utf-8",
-            newline="",
-        ) as afp:
-
+    if CSV_DATA:
+        with open(file=PATH + "/csv_data/data.csv", mode="a", encoding="utf-8") as afp:
             writer = csv.writer(afp, dialect="unix")
-            writer.writerow(static.CSV_COLUMNS)
+            writer.writerow(settings.DB_COLUMS)
 
-            for r_url in all_race_urls:
-                time.sleep(4)
+            for url in settings.URLS:
+                site_connector = SiteConnector(url, engine)
+                site_connector.get_cookies()
 
-                print(r_url[0],r_url[1])
-                ds = RaceScraper(r_url[0],r_url[1])
+                html = site_connector.get_html_page(site_connector.url)
+                all_race_urls = site_connector.get_race_venues(html)
 
-                result = ds()
-                # print(result)
-                if result:
-                    writer.writerows(result)
-                time.sleep(1)
-        count += 1
+
+                for r_url in all_race_urls:
+                    print(r_url[0],r_url[1])
+                    ds = RaceScraper(r_url[0],r_url[1], site_connector)
+
+                    result = ds()
+
+                    if result:
+                        writer.writerows(result)
+                    time.sleep(3)
+
+
+if __name__ == "__main__":
+    main()
 

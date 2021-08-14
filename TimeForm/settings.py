@@ -1,12 +1,50 @@
+import os
 import pathlib
+import datetime as dt
+from loggers import custom_logger
 
 PATH = str(pathlib.Path(__file__).parent)
+LOGGER = custom_logger(PATH, "general")
 
-URLS = (
-    'https://www.timeform.com/horse-racing/results/2021-08-11',
-    'https://www.timeform.com/horse-racing/results/2021-08-12',
-    'https://www.timeform.com/horse-racing/results/2021-08-13',
-)
+DB_PATH = PATH + '/results.db'
+
+CSV_DATA_DIR = pathlib.Path(PATH + "/csv_data")
+
+CSV_DATA = True
+if not CSV_DATA_DIR.exists() or not os.path.isdir(PATH + "/csv_data"):
+    CSV_DATA = False
+    print('\nATTENTION: There is no "csv_data" folder in %s' % PATH)
+    print('IMPORTANT: Create "csv_data" folder in %s\n' % PATH)
+
+CURRENT_YEAR = dt.datetime.now().year
+CURRENT_MONTH = dt.datetime.now().month
+CURRENT_DAY = dt.datetime.now().day
+
+URLS = []
+
+MONTHS = {
+        1: 31, 2: 28,
+        3: 31, 4: 30,
+        5: 31, 6: 30,
+        7: 31, 8: 31,
+        9: 30, 10: 31,
+        11: 30, 12: 31,
+    }
+
+
+for year in range(2021, CURRENT_YEAR + 1):
+    MONTHS[2] = 28
+
+    if not year % 4:
+        MONTHS[2] = 29
+
+    for month in range(1, CURRENT_MONTH + 1):
+        for day in range(1, MONTHS.get(month)+1):
+            date = '%d-%d-%d' % (year, month, day)
+            url = 'https://www.timeform.com/horse-racing/results/%s' % date
+            URLS.append(url)
+
+
 
 HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
@@ -57,36 +95,51 @@ DB_COLUMS = (
     "B2L",
     "L2B",
     "runners",
-
+    "trap",
+    "stake",
+    "back_winners",
+    "lay_winners",
     "back_win",
     "lay_win",
     "back_roi",
-    "back_s_rate",
-    "back_probability",
-
     "lay_roi",
+    "back_s_rate",
     "lay_s_rate",
+    "back_probability",
 )
 
 
-CSV_COLUMNS = (
-    "date",
-    "time",
-    "track",
-    "distance",
-    "race_type",
-    "position",
-    "horse_number",
-    "horse_name",
-    "jokey",
-    "trainer",
-    "horse_age",
-    "horse_weight",
-    "bsp",
-    "bpsp",
-    "high",
-    "low",
-    "B2L",
-    "L2B",
-    "runners",
-)
+
+CREATE_RACE_RESULT_TABLE_QUERY = '''
+CREATE TABLE race_results(
+    date VARCHAR(20),
+    time VARCHAR(10),
+    track VARCHAR(30),
+    distance VARCHAR(15),
+    race_type VARCHAR(20),
+    position INT,
+    horse_number INT,
+    horse_name VARCHAR(50),
+    jokey VARCHAR(30),
+    trainer VARCHAR(30),
+    horse_age FLOAT,
+    horse_weight VARCHAR(10),
+    bsp FLOAT,
+    bpsp FLOAT,
+    high FLOAT,
+    low FLOAT,
+    B2L FLOAT,
+    L2B FLOAT,
+    runners INT,
+    trap INT,
+    stake INT DEFAULT 1,
+    back_winners FLOAT DEFAULT 0,
+    lay_winners FLOAT DEFAULT 0,
+    back_win FLOAT DEFAULT 0,
+    lay_win FLOAT DEFAULT 0,
+    back_roi FLOAT DEFAULT 0,
+    lay_roi FLOAT DEFAULT 0,
+    back_s_rate FLOAT DEFAULT 0,
+    lay_s_rate FLOAT DEFAULT 0,
+    back_probability FLOAT DEFAULT 0);'''
+
