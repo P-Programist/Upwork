@@ -1,41 +1,45 @@
 import csv
 import time
 import datetime as dt
-from random import choice
 
 import cloudscraper
 from bs4 import BeautifulSoup as BS
 from requests.exceptions import ConnectionError as CloudConnectionError
 
-import settings
-from settings import PATH, CSV_DATA
+from settings import (
+    PATH, CSV_DATA, COOKIES,
+    HEADERS, LOGGER, URLS,
+    XLSX_DATA
+)
+
+import db
 
 
 class SiteConnector:
     def __init__(self, url, engine) -> None:
         self.url = url
         self.engine = engine
-        self.cookies = settings.COOKIES
+        self.cookies = COOKIES
 
     def get_cookies(self):
         try:
             cookie_request = self.engine.get(
                 url=self.url,
-                headers=settings.HEADERS,
-                cookies=settings.COOKIES,
+                headers=HEADERS,
+                cookies=COOKIES,
             )
         except CloudConnectionError:
-            settings.LOGGER.info(
+            LOGGER.info(
                 "Cookies could not be updated because of the Connection Error, settings Cookies have been used instead"
             )
             return self.cookies
 
         if cookie_request.cookies:
             self.cookies = cookie_request.cookies
-            settings.LOGGER.info("Cookies have been updated")
+            LOGGER.info("Cookies have been updated")
             return cookie_request.cookies
 
-        settings.LOGGER.info("settings Cookies have been used")
+        LOGGER.info("settings Cookies have been used")
 
         return self.cookies
 
@@ -43,11 +47,11 @@ class SiteConnector:
         try:
             html_page_request = self.engine.get(
                 url=url,
-                headers=settings.HEADERS,
+                headers=HEADERS,
                 cookies=self.cookies
             )
         except CloudConnectionError:
-            settings.LOGGER.info(
+            LOGGER.info(
                 "HTML page could not be fetched because of the Connection Error, settings Cookies have been used instead"
             )
             return 0
@@ -55,7 +59,7 @@ class SiteConnector:
         if html_page_request.status_code == 200:
             return html_page_request.text
 
-        settings.LOGGER.info(
+        LOGGER.info(
             "HTML page could not be fetched because of the response %d"
             % html_page_request.status_code
         )
@@ -67,7 +71,7 @@ class SiteConnector:
 
         race_results_window = soup.find("section", attrs={"id": "archiveFormList"})
         if not race_results_window:
-            settings.LOGGER.warning(
+            LOGGER.warning(
                 "Could not find archiveFormList SECTION window probably because of wrong HTML or there are no races"
             )
             return []
@@ -75,7 +79,7 @@ class SiteConnector:
         result_card_sections = race_results_window.find_all("div", class_='w-results-holder')[1:]
 
         if not result_card_sections:
-            settings.LOGGER.warning(
+            LOGGER.warning(
                 "Could not find Venues probably because of wrong HTML or there are no races"
             )
             return []
@@ -131,6 +135,20 @@ class SiteConnector:
 
         return race_links
 
+    def all_races_finished(self):
+        html = self.get_html_page('https://www.timeform.com/horse-racing')
+
+        if html:
+            soup = BS(html, "html.parser")
+            upcoming_races = soup.find_all("a", class_='w-racecard-grid-race-soon')
+            active_races = soup.find_all("a", class_='w-racecard-grid-race-active')
+            
+            if not upcoming_races and not active_races:
+                return True
+
+        return False
+        
+
 
 
 
@@ -145,7 +163,7 @@ class RaceScraper:
 
     def get_race_datetime(self):
         if not self.html:
-            settings.LOGGER.error("Could not scrape %s because of broken HTML" % self.url)
+            LOGGER.error("Could not scrape %s because of broken HTML" % self.url)
             return []
 
         soup = BS(self.html, "html.parser")
@@ -154,7 +172,7 @@ class RaceScraper:
         header_rows = race_header.find_all("tr")
 
         if len(header_rows) < 2:
-            settings.LOGGER.warning(
+            LOGGER.warning(
                 "Could not fetch DATE and TIME from %s" % self.url
             )
             return []
@@ -162,7 +180,7 @@ class RaceScraper:
         race_datetime = header_rows[0].h2.text.split()
 
         if len(race_datetime) != 5:
-            settings.LOGGER.warning(
+            LOGGER.warning(
                 "Could not fetch DATE and TIME from %s" % self.url
             )
             return []
@@ -211,7 +229,7 @@ class RaceScraper:
         main_window = soup.find("div", attrs={"id": "ReportBody"})
 
         if not main_window:
-            settings.LOGGER.warning(
+            LOGGER.warning(
                 "Could not find ReportBody on %s because of the race did not start yet" % self.url
             )
             return []
@@ -295,19 +313,28 @@ class RaceScraper:
 def main():
     engine = cloudscraper.create_scraper()
 
-    if CSV_DATA:
-        with open(file=PATH + "/csv_data/raw_data.csv", mode="a", encoding="utf-8") as afp:
+    if CSV_DATA and XLSX_DATA:
+        with open(file=PATH + "/CSV/data.csv", mode="a", encoding="utf-8") as afp:
             writer = csv.writer(afp, dialect="unix")
-            writer.writerow(settings.DB_COLUMS)
+            # writer.writerow(DB_COLUMS)
 
-            for url in settings.URLS:
+            
+            for url in URLS:
                 site_connector = SiteConnector(url, engine)
                 site_connector.get_cookies()
+
+                if not site_connector.all_races_finished():
+                    LOGGER.error("There was an attempt to scrape data when not all races finished at %s" % str(dt.datetime.now()))
+                    print('There are still some races that are not finished yet for today!\n'.upper())
+                    continue_ = input('Are sure you want to continue?\nIn this case not all the data will be collected!\n\nYes|No: ').lower()
+                    if continue_ != 'yes':
+                        print('Good choice, wait until all races will be finished...')
+                        exit()
 
                 html = site_connector.get_html_page(site_connector.url)
 
                 if not html:
-                    settings.LOGGER.error("Could not scrape %s because of broken HTML" % url)
+                    LOGGER.error("Could not scrape %s because of broken HTML" % url)
                     continue
                 
                 all_race_urls = site_connector.get_race_venues(html)
@@ -320,9 +347,14 @@ def main():
 
                     if result:
                         writer.writerows(result)
-                    time.sleep(5)
+                    time.sleep(3.7)
                 time.sleep(5)
 
 if __name__ == "__main__":
     main()
+    db.data_uploader()
+    db.db_to_xslx_today()
+    db.db_to_xslx_last_month()
+    db.db_to_xslx_alltime()
+    db.CURSOR.close()
 

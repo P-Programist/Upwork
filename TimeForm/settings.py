@@ -9,19 +9,31 @@ LOGGER = custom_logger(PATH, "general")
 DB_PATH = PATH + '/results.db'
 DB_TABLE_NAME = 'races'
 
-CSV_DATA_DIR = pathlib.Path(PATH + "/csv_data")
+CSV_DATA_DIR = pathlib.Path(PATH + "/CSV")
 
 CSV_DATA = True
-if not CSV_DATA_DIR.exists() or not os.path.isdir(PATH + "/csv_data"):
+if not CSV_DATA_DIR.exists() or not os.path.isdir(PATH + "/CSV"):
     CSV_DATA = False
-    print('\nATTENTION: There is no "csv_data" folder in %s' % PATH)
-    print('IMPORTANT: Create "csv_data" folder in %s\n' % PATH)
+    print('\nATTENTION: There is no "CSV" folder in %s' % PATH)
+    print('IMPORTANT: Create "CSV" folder in %s\n' % PATH)
+
+
+XLSX_DATA_DIR = pathlib.Path(PATH + "/XLSX")
+
+XLSX_DATA = True
+if not XLSX_DATA_DIR.exists() or not os.path.isdir(PATH + "/XLSX"):
+    XLSX_DATA = False
+    print('\nATTENTION: There is no "XLSX" folder in %s' % PATH)
+    print('IMPORTANT: Create "XLSX" folder in %s\n' % PATH)
+
 
 CURRENT_YEAR = dt.datetime.now().year
 CURRENT_MONTH = dt.datetime.now().month
 CURRENT_DAY = dt.datetime.now().day
 
-URLS = []
+URLS = [
+    'https://www.timeform.com/horse-racing/results/today'
+]
 
 MONTHS = {
         1: 31, 2: 28,
@@ -33,19 +45,16 @@ MONTHS = {
     }
 
 
-for year in range(2021, CURRENT_YEAR + 1):
-    MONTHS[2] = 28
 
-    if not year % 4:
-        MONTHS[2] = 29
+LAST_WEEK = dt.datetime.strftime((dt.datetime.today() - dt.timedelta(days=7)), '%-d/%-m/%y')
+LAST_MONTH = dt.datetime.strftime((dt.datetime.today() - dt.timedelta(days=31)), '%-d/%-m/%y')
+TODAY = dt.datetime.strftime((dt.datetime.today() - dt.timedelta(days=1)), '%-d/%-m/%y')
 
-    for month in range(1, CURRENT_MONTH + 1):
-        for day in range(1, MONTHS.get(month)+1):
-            date = '%d-%d-%d' % (year, month, day)
-            url = 'https://www.timeform.com/horse-racing/results/%s' % date
-            URLS.append(url)
-
-
+TIMELINES = {
+    "week": LAST_WEEK,
+    "month": LAST_MONTH,
+    "today": TODAY
+}
 
 HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
@@ -96,23 +105,24 @@ DB_COLUMS = (
     "B2L",
     "L2B",
     "runners",
-    "trap",
+    "Betfair_SP_Order",
     "stake",
-    "back_winners",
-    "lay_winners",
-    "back_win",
-    "lay_win",
-    "back_roi",
-    "lay_roi",
-    "back_s_rate",
-    "lay_s_rate",
-    "back_probability",
+    "Won_Races",
+    "Lost_Races",
+    "Back_Win",
+    "Lay_Win",
+    "Back_ROI",
+    "Lay_ROI",
+    "Back_S_Rate",
+    "Lay_S_Rate",
+    "BackProbability",
 )
 
 
 
 CREATE_RACE_RESULT_TABLE_QUERY = '''
 CREATE TABLE races(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     date VARCHAR(20),
     time VARCHAR(10),
     track VARCHAR(30),
@@ -132,15 +142,55 @@ CREATE TABLE races(
     B2L FLOAT,
     L2B FLOAT,
     runners INT,
-    trap INT,
+    Betfair_SP_Order INT,
     stake INT DEFAULT 1,
-    back_winners FLOAT DEFAULT 0,
-    lay_winners FLOAT DEFAULT 0,
-    back_win FLOAT DEFAULT 0,
-    lay_win FLOAT DEFAULT 0,
-    back_roi FLOAT DEFAULT 0,
-    lay_roi FLOAT DEFAULT 0,
-    back_s_rate FLOAT DEFAULT 0,
-    lay_s_rate FLOAT DEFAULT 0,
-    back_probability FLOAT DEFAULT 0);'''
+    Won_Races FLOAT DEFAULT 0,
+    Lost_Races FLOAT DEFAULT 0,
+    Back_Win FLOAT DEFAULT 0,
+    Lay_Win FLOAT DEFAULT 0,
+    Back_ROI FLOAT DEFAULT 0,
+    Lay_ROI FLOAT DEFAULT 0,
+    Back_S_Rate FLOAT DEFAULT 0,
+    Lay_S_Rate FLOAT DEFAULT 0,
+    BackProbability FLOAT DEFAULT 0);'''
 
+
+GENERAL_XLSX_COLUMNS = [
+    "Date",
+    "Time",
+    "Track",
+    "Distance",
+    "RaceType",
+    "Position",
+    "HorseNumber",
+    "HorseName",
+    "Jokey",
+    "Trainer",
+    "HorseAge",
+    "HorseWeight",
+    "Bsp",
+    "Bpsp",
+    "High",
+    "Low",
+    "B2L",
+    "L2B",
+    "Runners"
+]
+
+BACK_WIN_XLSX_COLUMNS = [
+    "Betfair_SP_Order",
+    "Won_Races",
+    "Back_Win",
+    "Back_ROI",
+    "Back_S_Rate",
+    "BackProbability"
+]
+
+
+LAY_WIN_XLSX_COLUMNS = [
+    "Betfair_SP_Order",
+    "Lost_Races",
+    "Lay_Win",
+    "Lay_ROI",
+    "Lay_S_Rate",
+]

@@ -8,7 +8,11 @@ from settings import (
     DB_COLUMS, 
     CREATE_RACE_RESULT_TABLE_QUERY, 
     DB_PATH, CSV_DATA,
-    DB_TABLE_NAME
+    DB_TABLE_NAME,
+    TIMELINES,
+    GENERAL_XLSX_COLUMNS,
+    BACK_WIN_XLSX_COLUMNS,
+    LAY_WIN_XLSX_COLUMNS
 )
 
 
@@ -140,7 +144,9 @@ def select(column_name: str, table_name: str, conditions: str=None):
         sql = "SELECT %s FROM %s;" % (column_name, table_name)
 
     result = CURSOR.execute(sql)
-    return result.fetchall()
+    
+    for res in result.fetchall():
+        yield res
 
 
 def data_uploader():
@@ -148,7 +154,7 @@ def data_uploader():
     create(DB_TABLE_NAME)
 
     if CSV_DATA:
-        csv_file = open(PATH + '/csv_data/data.csv', 'r')
+        csv_file = open(PATH + '/CSV/data.csv', 'r')
         csv_reader = upload_csv(csv_file)
         csv_reader_copy = tuple(csv_reader)
 
@@ -159,68 +165,142 @@ def data_uploader():
 
 
 
-def db_to_xslx():
-    workbook_1 = openpyxl.Workbook()
-    worksheet_1 = workbook_1.active
+def db_to_xslx_today():
+    ####################################################################################################
+    ################################## TODAY RACES GENERAL INFORMATION #################################
+    ####################################################################################################
 
-    table_1_result = select(','.join(DB_COLUMS[:19]), DB_TABLE_NAME)
+    today_workbook_general = openpyxl.Workbook()
+    today_worksheet_general = today_workbook_general.active
+    today_race_general = select(','.join(DB_COLUMS[:19]), DB_TABLE_NAME, 'WHERE date = \'%s\'' % TIMELINES.get('today'))
 
-    worksheet_1.append(
-        [
-            "Date",
-            "Time",
-            "Track",
-            "Distance",
-            "RaceType",
-            "Position",
-            "HorseNumber",
-            "HorseName",
-            "Jokey",
-            "Trainer",
-            "HorseAge",
-            "HorseWeight",
-            "Bsp",
-            "Bpsp",
-            "High",
-            "Low",
-            "B2L",
-            "L2B",
-            "Runners"
-        ]
-    )
-    for row in table_1_result:
-        worksheet_1.append(row)
+    today_worksheet_general.append(GENERAL_XLSX_COLUMNS)
 
-    workbook_1.save(PATH + '/table_1.xlsx')
+    for row in today_race_general:
+        today_worksheet_general.append(row)
+    today_workbook_general.save(PATH + '/XLSX/TODAY/todayRacesGeneral.xlsx')
 
 
-    workbook_2 = openpyxl.Workbook()
-    worksheet_2 = workbook_2.active
+    ####################################################################################################
+    ################################# TODAY RACES BACK WIN INFORMATION #################################
+    ####################################################################################################
 
-    table_2_result = select(','.join(['Trap'] + list(DB_COLUMS[21:])), DB_TABLE_NAME)
+    today_workbook_back_win = openpyxl.Workbook()
+    today_worksheet_back_win = today_workbook_back_win.active
+    today_race_details = select(','.join(['Betfair_SP_Order'] + list(DB_COLUMS[21::2])), DB_TABLE_NAME, 'WHERE date = \'%s\'' % TIMELINES.get('today'))
 
-    worksheet_2.append(
-        [
-            "Trap",
-            "BackWinners",
-            "LayWinners",
-            "BackWin",
-            "LayWin",
-            "BackRoi",
-            "LayRoi",
-            "BackSrate",
-            "LaySrate",
-            "BackProbability"
-        ]
-    )
-    for row in table_2_result:
-        worksheet_2.append(row)
+    today_worksheet_back_win.append(BACK_WIN_XLSX_COLUMNS)
 
-    workbook_2.save(PATH + '/table_2.xlsx')
+    for row in today_race_details:
+        today_worksheet_back_win.append(row)
+    today_workbook_back_win.save(PATH + '/XLSX/TODAY/todayRacesBackWin.xlsx')
 
-if __name__ == "__main__":
-    data_uploader()
-    db_to_xslx()
-    CURSOR.close()
 
+    ####################################################################################################
+    ################################## TODAY RACES LAY WIN INFORMATION #################################
+    ####################################################################################################
+
+    today_workbook_lay_win = openpyxl.Workbook()
+    today_worksheet_lay_win = today_workbook_lay_win.active
+    today_race_details = select(','.join(['Betfair_SP_Order'] + list(DB_COLUMS[22::2])), DB_TABLE_NAME, 'WHERE date = \'%s\'' % TIMELINES.get('today'))
+
+    today_worksheet_lay_win.append(LAY_WIN_XLSX_COLUMNS)
+
+    for row in today_race_details:
+        today_worksheet_lay_win.append(row)
+    today_workbook_lay_win.save(PATH + '/XLSX/TODAY/todayRacesLayWin.xlsx')
     
+
+def db_to_xslx_last_month():
+    ####################################################################################################
+    ################################ LAST MONTH RACES GENERAL INFORMATION ##############################
+    ####################################################################################################
+
+    lastMonth_workbook_general = openpyxl.Workbook()
+    lastMonth_worksheet_general = lastMonth_workbook_general.active
+    month_id = next(select('id', DB_TABLE_NAME, 'WHERE date = \'%s\' LIMIT 1' % TIMELINES.get('month')))
+    month_race = select(','.join(DB_COLUMS[:19]), DB_TABLE_NAME, 'WHERE id >= %s' % month_id)
+
+    lastMonth_worksheet_general.append(GENERAL_XLSX_COLUMNS)
+
+    for row in month_race:
+        lastMonth_worksheet_general.append(row)
+    lastMonth_workbook_general.save(PATH + '/XLSX/LAST_MONTH/lastMonthRacesGeneral.xlsx')
+
+
+    ####################################################################################################
+    ############################### LAST MONTH RACES BACK WIN INFORMATION ##############################
+    ####################################################################################################
+
+    lastMonth_workbook_back_win = openpyxl.Workbook()
+    lastMonth_worksheet_back_win = lastMonth_workbook_back_win.active
+    month_id = next(select('id', DB_TABLE_NAME, 'WHERE date = \'%s\' LIMIT 1' % TIMELINES.get('month')))
+    month_race = select(','.join(['Betfair_SP_Order'] + list(DB_COLUMS[21::2])), DB_TABLE_NAME, 'WHERE id >= %s' % month_id)
+
+    lastMonth_worksheet_back_win.append(BACK_WIN_XLSX_COLUMNS)
+
+    for row in month_race:
+        lastMonth_worksheet_back_win.append(row)
+    lastMonth_workbook_back_win.save(PATH + '/XLSX/LAST_MONTH/lastMonthRacesBackWin.xlsx')
+
+
+    ####################################################################################################
+    ################################ LAST MONTH RACES LAY WIN INFORMATION ##############################
+    ####################################################################################################
+
+    lastMonth_workbook_lay_win = openpyxl.Workbook()
+    lastMonth_worksheet_lay_win = lastMonth_workbook_lay_win.active
+    month_race = select(','.join(['Betfair_SP_Order'] + list(DB_COLUMS[22::2])), DB_TABLE_NAME, 'WHERE id >= %s' % month_id)
+
+    lastMonth_worksheet_lay_win.append(LAY_WIN_XLSX_COLUMNS)
+
+    for row in month_race:
+        lastMonth_worksheet_lay_win.append(row)
+    lastMonth_workbook_lay_win.save(PATH + '/XLSX/LAST_MONTH/lastMonthRacesLayWin.xlsx')
+
+
+def db_to_xslx_alltime():
+    ####################################################################################################
+    ################################ ALL TIME RACES GENERAL INFORMATION ################################
+    ####################################################################################################
+
+    allTime_workbook_general = openpyxl.Workbook()
+    allTime_worksheet_general = allTime_workbook_general.active
+    allTime_race_general = select(','.join(DB_COLUMS[:19]), DB_TABLE_NAME)
+
+    allTime_worksheet_general.append(GENERAL_XLSX_COLUMNS)
+
+    for row in allTime_race_general:
+        allTime_worksheet_general.append(row)
+    allTime_workbook_general.save(PATH + '/XLSX/ALL_TIME/allTimeRacesGeneral.xlsx')
+
+
+    ####################################################################################################
+    ############################### ALL TIME RACES BACK WIN INFORMATION ################################
+    ####################################################################################################
+
+    allTime_workbook_back_win = openpyxl.Workbook()
+    allTime_worksheet_back_win = allTime_workbook_back_win.active
+    allTime_race_details = select(','.join(['Betfair_SP_Order'] + list(DB_COLUMS[21::2])), DB_TABLE_NAME)
+
+    allTime_worksheet_back_win.append(BACK_WIN_XLSX_COLUMNS)
+
+    for row in allTime_race_details:
+        allTime_worksheet_back_win.append(row)
+    allTime_workbook_back_win.save(PATH + '/XLSX/ALL_TIME/allTimeRacesBackWin.xlsx')
+
+
+    ####################################################################################################
+    ################################ ALL TIME RACES LAY WIN INFORMATION ################################
+    ####################################################################################################
+
+    allTime_workbook_lay_win = openpyxl.Workbook()
+    allTime_worksheet_lay_win = allTime_workbook_lay_win.active
+    allTime_race_details = select(','.join(['Betfair_SP_Order'] + list(DB_COLUMS[22::2])), DB_TABLE_NAME)
+
+    allTime_worksheet_lay_win.append(LAY_WIN_XLSX_COLUMNS)
+
+    for row in allTime_race_details:
+        allTime_worksheet_lay_win.append(row)
+    allTime_workbook_lay_win.save(PATH + '/XLSX/ALL_TIME/allTimeRacesLayWin.xlsx')
+
