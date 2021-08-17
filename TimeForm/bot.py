@@ -6,13 +6,14 @@ import cloudscraper
 from bs4 import BeautifulSoup as BS
 from requests.exceptions import ConnectionError as CloudConnectionError
 
+import db
 from settings import (
     PATH, CSV_DATA, COOKIES,
     HEADERS, LOGGER, URLS,
-    XLSX_DATA
+    XLSX_DATA, DB_TABLE_NAME,
+    DB_COLUMS, CURSOR, check_db
 )
 
-import db
 
 
 class SiteConnector:
@@ -140,10 +141,11 @@ class SiteConnector:
 
         if html:
             soup = BS(html, "html.parser")
+            not_started_races = soup.find_all("a", class_='w-racecard-grid-race-inactive')
             upcoming_races = soup.find_all("a", class_='w-racecard-grid-race-soon')
             active_races = soup.find_all("a", class_='w-racecard-grid-race-active')
-            
-            if not upcoming_races and not active_races:
+
+            if not not_started_races and not upcoming_races and not active_races:
                 return True
 
         return False
@@ -314,47 +316,57 @@ def main():
     engine = cloudscraper.create_scraper()
 
     if CSV_DATA and XLSX_DATA:
-        with open(file=PATH + "/CSV/data.csv", mode="a", encoding="utf-8") as afp:
-            writer = csv.writer(afp, dialect="unix")
-            # writer.writerow(DB_COLUMS)
+        last_row_list = next(db.select('date', DB_TABLE_NAME, 'WHERE id = (SELECT MAX(id) FROM %s)' % DB_TABLE_NAME))
+        last_date = last_row_list[0] if last_row_list > 0 else None
 
+
+        if not SiteConnector(URLS[0], engine).all_races_finished():
+            LOGGER.error("There was an attempt to scrape data when not all races finished at %s" % str(dt.datetime.now()))
+            print('There are still some races that are not finished yet for today!\n'.upper())
+            continue_ = input('Are sure you want to continue?\nIn this case not all the data will be collected!\n\nYes|No: ').lower()
+            if continue_ != 'yes':
+                print('Good choice, wait until all races will be finished...')
+                exit()
+        
+        one_day_data_list = []
+
+        for url in URLS:
+            site_connector = SiteConnector(url, engine)
+            site_connector.get_cookies()
+
+            html = site_connector.get_html_page(site_connector.url)
+
+            if not html:
+                LOGGER.error("Could not scrape %s because of broken HTML" % url)
+                continue
             
-            for url in URLS:
-                site_connector = SiteConnector(url, engine)
-                site_connector.get_cookies()
+            all_race_urls = site_connector.get_race_venues(html)
 
-                if not site_connector.all_races_finished():
-                    LOGGER.error("There was an attempt to scrape data when not all races finished at %s" % str(dt.datetime.now()))
-                    print('There are still some races that are not finished yet for today!\n'.upper())
-                    continue_ = input('Are sure you want to continue?\nIn this case not all the data will be collected!\n\nYes|No: ').lower()
-                    if continue_ != 'yes':
-                        print('Good choice, wait until all races will be finished...')
-                        exit()
+            for r_url in all_race_urls:
+                ds = RaceScraper(r_url[0],r_url[1], site_connector)
+                result = ds()
 
-                html = site_connector.get_html_page(site_connector.url)
+                if result:
+                    one_day_data_list.extend(result)
+                time.sleep(3.7)
+            time.sleep(2)
 
-                if not html:
-                    LOGGER.error("Could not scrape %s because of broken HTML" % url)
-                    continue
-                
-                all_race_urls = site_connector.get_race_venues(html)
 
-                for r_url in all_race_urls:
-                    print(r_url[0],r_url[1])
-                    ds = RaceScraper(r_url[0],r_url[1], site_connector)
+        if last_date in one_day_data_list[0]:
+            print('\nYou have already scraped the data today!\nATTENTION: The data might be duplicated!')
+            exit()
+        
+        with open(file=PATH + "/CSV/data.csv", mode="w", encoding="utf-8") as afp:
+            writer = csv.writer(afp, dialect="unix")
+            writer.writerow(DB_COLUMS)
+            writer.writerows(one_day_data_list)
 
-                    result = ds()
-
-                    if result:
-                        writer.writerows(result)
-                    time.sleep(3.7)
-                time.sleep(5)
 
 if __name__ == "__main__":
-    main()
-    db.data_uploader()
-    db.db_to_xslx_today()
-    db.db_to_xslx_last_month()
-    db.db_to_xslx_alltime()
-    db.CURSOR.close()
-
+    if check_db():
+        main()
+        db.data_uploader()
+        db.db_to_xslx_today()
+        db.db_to_xslx_last_month()
+        db.db_to_xslx_alltime()
+        CURSOR.close()

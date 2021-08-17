@@ -1,4 +1,5 @@
 import os
+import sqlite3
 import pathlib
 import datetime as dt
 from loggers import custom_logger
@@ -6,9 +7,20 @@ from loggers import custom_logger
 PATH = str(pathlib.Path(__file__).parent)
 LOGGER = custom_logger(PATH, "general")
 
+##################################################
+############# DATABASE CONFIGS ###################
+##################################################
 DB_PATH = PATH + '/results.db'
 DB_TABLE_NAME = 'races'
 
+DATABASE_PATH = pathlib.Path(DB_PATH)
+
+CONNECTION = sqlite3.connect(DB_PATH)
+CURSOR = CONNECTION.cursor()
+##################################################
+
+
+####################################################################################################
 CSV_DATA_DIR = pathlib.Path(PATH + "/CSV")
 
 CSV_DATA = True
@@ -26,23 +38,56 @@ if not XLSX_DATA_DIR.exists() or not os.path.isdir(PATH + "/XLSX"):
     print('\nATTENTION: There is no "XLSX" folder in %s' % PATH)
     print('IMPORTANT: Create "XLSX" folder in %s\n' % PATH)
 
+####################################################################################################
+
+
+
+######################################################################
+################# DATABASE CREATION FUNCTIONS ########################
+######################################################################
+def create(table_name):
+    try:
+        CURSOR.execute(CREATE_RACE_RESULT_TABLE_QUERY)
+        CONNECTION.commit()
+    except sqlite3.OperationalError:
+        print('Table %s is already exists!' % table_name.upper())
+
+
+def drop_table(table_name):
+    try:
+        CURSOR.execute("DROP TABLE %s;" % table_name)
+        CONNECTION.commit()
+    except sqlite3.OperationalError:
+        print('Table %s does not exist!' % table_name.upper())
+######################################################################
+
+
+def check_db():
+    if DATABASE_PATH.exists():
+        # Uncomment the line below in case You want to recreate the Database!
+        # drop_table(DB_TABLE_NAME)
+        create(DB_TABLE_NAME)
+        return True
+
+
+
 
 CURRENT_YEAR = dt.datetime.now().year
 CURRENT_MONTH = dt.datetime.now().month
 CURRENT_DAY = dt.datetime.now().day
 
 URLS = [
-    'https://www.timeform.com/horse-racing/results/today'
+    'https://www.timeform.com/horse-racing/results/yesterday'
 ]
 
 MONTHS = {
-        1: 31, 2: 28,
-        3: 31, 4: 30,
-        5: 31, 6: 30,
-        7: 31, 8: 31,
-        9: 30, 10: 31,
-        11: 30, 12: 31,
-    }
+    1: 31, 2: 28,
+    3: 31, 4: 30,
+    5: 31, 6: 30,
+    7: 31, 8: 31,
+    9: 30, 10: 31,
+    11: 30, 12: 31,
+}
 
 
 

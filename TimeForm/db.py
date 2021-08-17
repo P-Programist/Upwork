@@ -1,23 +1,19 @@
 import csv
-import sqlite3
 
 import openpyxl
 
 from settings import (
     PATH, 
-    DB_COLUMS, 
-    CREATE_RACE_RESULT_TABLE_QUERY, 
-    DB_PATH, CSV_DATA,
+    DB_COLUMS,
+    CSV_DATA,
     DB_TABLE_NAME,
     TIMELINES,
     GENERAL_XLSX_COLUMNS,
     BACK_WIN_XLSX_COLUMNS,
-    LAY_WIN_XLSX_COLUMNS
+    LAY_WIN_XLSX_COLUMNS,
+    CONNECTION, CURSOR
 )
 
-
-CONNECTION = sqlite3.connect(DB_PATH)
-CURSOR = CONNECTION.cursor()
 
 INSERT_COLUMNS_ROW = ', '.join(DB_COLUMS)
 
@@ -30,20 +26,6 @@ def upload_csv(csv_file):
     except StopIteration:
         return []
 
-
-def create(table_name):
-    try:
-        CURSOR.execute(CREATE_RACE_RESULT_TABLE_QUERY)
-    except sqlite3.OperationalError:
-        print('Table %s is already exists!' % table_name.upper())
-
-
-def drop_table(table_name):
-    try:
-        CURSOR.execute("DROP TABLE %s;" % table_name)
-        CONNECTION.commit()
-    except sqlite3.OperationalError:
-        print('Table %s does not exist!' % table_name.upper())
 
 
 def insert(table_name, columns, race_types, reader):
@@ -145,14 +127,15 @@ def select(column_name: str, table_name: str, conditions: str=None):
 
     result = CURSOR.execute(sql)
     
-    for res in result.fetchall():
-        yield res
+    rows = result.fetchall()
+    if rows:
+        for res in rows:
+            yield res
+    else:
+        yield 0
 
 
 def data_uploader():
-    drop_table(DB_TABLE_NAME)
-    create(DB_TABLE_NAME)
-
     if CSV_DATA:
         csv_file = open(PATH + '/CSV/data.csv', 'r')
         csv_reader = upload_csv(csv_file)
