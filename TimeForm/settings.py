@@ -1,8 +1,11 @@
+import csv
 import os
 import sqlite3
 import pathlib
 import datetime as dt
 from loggers import custom_logger
+
+
 
 PATH = str(pathlib.Path(__file__).parent)
 LOGGER = custom_logger(PATH, "general")
@@ -23,21 +26,18 @@ CURSOR = CONNECTION.cursor()
 ####################################################################################################
 CSV_DATA_DIR = pathlib.Path(PATH + "/CSV")
 
-CSV_DATA = True
 if not CSV_DATA_DIR.exists() or not os.path.isdir(PATH + "/CSV"):
-    CSV_DATA = False
     print('\nATTENTION: There is no "CSV" folder in %s' % PATH)
-    print('IMPORTANT: Create "CSV" folder in %s\n' % PATH)
+    os.mkdir(PATH + '/CSV')
+    print('IMPORTANT: The "CSV" folder has been created successfully in "%s"\n' % PATH)
 
 
 XLSX_DATA_DIR = pathlib.Path(PATH + "/XLSX")
 
-XLSX_DATA = True
 if not XLSX_DATA_DIR.exists() or not os.path.isdir(PATH + "/XLSX"):
-    XLSX_DATA = False
     print('\nATTENTION: There is no "XLSX" folder in %s' % PATH)
-    print('IMPORTANT: Create "XLSX" folder in %s\n' % PATH)
-
+    os.mkdir(PATH + '/XLSX')
+    print('IMPORTANT: The "XLSX" folder has been created successfully in "%s"\n' % PATH)
 ####################################################################################################
 
 
@@ -45,7 +45,7 @@ if not XLSX_DATA_DIR.exists() or not os.path.isdir(PATH + "/XLSX"):
 ######################################################################
 ################# DATABASE CREATION FUNCTIONS ########################
 ######################################################################
-def create(table_name):
+def create_table(table_name):
     try:
         CURSOR.execute(CREATE_RACE_RESULT_TABLE_QUERY)
         CONNECTION.commit()
@@ -53,32 +53,60 @@ def create(table_name):
         print('Table %s is already exists!' % table_name.upper())
 
 
-def drop_table(table_name):
-    try:
-        CURSOR.execute("DROP TABLE %s;" % table_name)
-        CONNECTION.commit()
-    except sqlite3.OperationalError:
-        print('Table %s does not exist!' % table_name.upper())
+def check_db():
+    if DATABASE_PATH.exists():
+        table_exists_sql = "SELECT name FROM sqlite_master WHERE type ='table' AND name NOT LIKE 'sqlite_%';"
+        query = CURSOR.execute(table_exists_sql)
+        if not query.fetchall():
+            create_table(DB_TABLE_NAME)
+            return 2
+        return 1
+    return 0
 ######################################################################
 
 
-def check_db():
-    if DATABASE_PATH.exists():
-        # Uncomment the line below in case You want to recreate the Database!
-        # drop_table(DB_TABLE_NAME)
-        create(DB_TABLE_NAME)
-        return True
+def get_race_type_name(header):
+    if 'HURDLE' in header:
+        race_type_name = 'OTHER HURDLE'
+        if 'HANDICAP' in header:
+            race_type_name = 'HANDICAP HURDLE'
+        elif 'MAIDEN' in header:
+            race_type_name = 'MAIDEN HURDLE'
+        elif 'JUVENILE' in header:
+            race_type_name = 'JUVENILE HURDLE'
+        elif 'NOVICES' in header:
+            race_type_name = 'NOVICES HURDLE'
+
+    elif 'STAKES' in header:
+        race_type_name = 'OTHER FLAT'
+        if 'MAIDEN' in header:
+            race_type_name = 'MAIDEN STAKES'
+        elif 'NOVICE' in header:
+            race_type_name = 'NOVICE STAKES'
+        elif 'SELLING' in header:
+            race_type_name = 'SELLING STAKES'
+
+    elif 'HANDICAP' in header:
+        race_type_name = 'HANDICAP'
+        if 'CHASE' in header:
+            race_type_name = 'CHASE HANDICAP'
+        elif 'SELLING' in header:
+            race_type_name = 'SELLING HANDICAP'
+    else:
+        race_type_name = ' '.join(header[-3:-1])
+    
+    return race_type_name
 
 
+
+URL = 'https://www.timeform.com/horse-racing/results/yesterday'
 
 
 CURRENT_YEAR = dt.datetime.now().year
 CURRENT_MONTH = dt.datetime.now().month
 CURRENT_DAY = dt.datetime.now().day
 
-URLS = [
-    'https://www.timeform.com/horse-racing/results/yesterday'
-]
+
 
 MONTHS = {
     1: 31, 2: 28,
@@ -119,13 +147,12 @@ HEADERS = {
 }
 
 COOKIES = {
-    ".AspNet.ApplicationCookie": "exJxWpZ8rvlbYojns4ouY07QGYymdVLAu_pFewAzh6pCADLfU30o6dxhMlyLTt2Dz5BGn4QXE6N1DdaQkOLSg8R7rd1tfXG6Of_FF80T5fSzbrMRItTv_-Dt2kDxvlKAvebYAANUHaT4MosWjsItN_uxiV1z43p2wGKn-Y-9JbYkXieyrQDNiL9WwxNkiIFOfhfTbY7xO4sOaWt7QBvzGBDaYpnce-E3AS5nQ9xG7zxYm7CBoEtesa87EAKPvNmDXDXAmocYuTyOCaJtVoeqQB3930_nA_t4w1mcQRhH1cc8ouNPQ9lPAGjznP1XrLfJX_b6s2OETAR7mNAC-Pq1HxT-1Vxgh19j9_znpHU5umLsyp8g6vjtaYzDppdXVM_iNuaFbLc1qY7FTmVi-Jy60IF9Fg391x09sDVIz1clGUfG8cqCOJ9vMch0vtG5jpanJiMKEtjhH3VAlr4Ee9O33IWpFzU",
-    "ARRAffinity": "58959f315ae110c77c27b360c2c2aa988f5fa92288eacf5bf282dfe6e588a5e9",
-    "ASLBSA": "edcea0edb343caeb5bfe6063a9f48f61d10f5975a23a4551d1daca85b2743553,0a72ced5e226f97f71fc726331f5674e8dceb21b0942efe4be7e6e60c5e28d96,81e077dbeef5ae66eaa683afd6e2628be800f2f043cad6bc40f125266ddce13d",
-    "ASLBSACORS": "edcea0edb343caeb5bfe6063a9f48f61d10f5975a23a4551d1daca85b2743553,0a72ced5e226f97f71fc726331f5674e8dceb21b0942efe4be7e6e60c5e28d96,81e077dbeef5ae66eaa683afd6e2628be800f2f043cad6bc40f125266ddce13d",
-    "ASP.NET_SessionId": "2elcxmku1w0fcs4ggufkyf0j",
+    ".AspNet.ApplicationCookie": "Zd-6Jjrh1XedYEINXxh9QmVzOiAEFvolcX6VCVX7BBesErbnieAZt25Girq_E3sraX8HLk8K4voE-7QBYtdjvtLZsbDTumDVdHB2sJlcb4L1dMypXAgaBa0JHYONK48kzyFK_yWe-VqppmlVSzEGR1jWzWGS_SnY8PZqnOQnv4D9nNf1S71lSFTqRPmQnxYyJiWoJdYrSB5c0tANrtVfkrb6BBexwPuXn9BbZ96eh2Stq-wjgaNVo_NLAllxoe5s38APATB1ojC4Q-VrhQa35zIhmEtXLARPfyZ7_C1hw2mrN2nzHePLAEHSbMIgLG9nCD2FDwFpHHmL-xxOUKpbTkAYj5Sww6O_wCLyW0DfqzH-6RcFveR2oVUMLHPZzL_oxRKWFgZ6sQ-DWaWQtZT26eh2AxO200pAJcG8uwaURZVQ_6R0k87cjij0AQUHGntrOV6-P4Fw1HT82UnNz4cOKbFOFsM",
+    "ARRAffinity": "c6f29867043fc4d89919a10a8b4f179c6019ba9f45ee19561219d7cdc0fa20ba",
+    "ASLBSA": "6227e485cfa5652212f4a30249a2ee8316d9030eef4fd24ab7d24dacfa9a1804,b51843e69dd1f73dfa83a72a15c2303b80a8ef35bce36ade013e0f1356891fcb,a4b51a5fbeb74b972c1a2a7a81843751791fa7ed7d63fca6012d495823104469",
+    "ASLBSACORS": "6227e485cfa5652212f4a30249a2ee8316d9030eef4fd24ab7d24dacfa9a1804,b51843e69dd1f73dfa83a72a15c2303b80a8ef35bce36ade013e0f1356891fcb,a4b51a5fbeb74b972c1a2a7a81843751791fa7ed7d63fca6012d495823104469",
+    "ASP.NET_SessionId": "55ize12xvdjqs0fmaebfmuis",
     "TF-CookiePrivacyPolicy": "Allow",
-    "TF-UpgradePopUp": "Seen",
     "TFM": "DeviceId=d77e652f-373d-4954-8d00-60d197b329bf",
 }
 
@@ -150,17 +177,6 @@ DB_COLUMS = (
     "B2L",
     "L2B",
     "runners",
-    "Betfair_SP_Order",
-    "stake",
-    "Won_Races",
-    "Lost_Races",
-    "Back_Win",
-    "Lay_Win",
-    "Back_ROI",
-    "Lay_ROI",
-    "Back_S_Rate",
-    "Lay_S_Rate",
-    "BackProbability",
 )
 
 
@@ -186,18 +202,7 @@ CREATE TABLE races(
     low FLOAT,
     B2L FLOAT,
     L2B FLOAT,
-    runners INT,
-    Betfair_SP_Order INT,
-    stake INT DEFAULT 1,
-    Won_Races FLOAT DEFAULT 0,
-    Lost_Races FLOAT DEFAULT 0,
-    Back_Win FLOAT DEFAULT 0,
-    Lay_Win FLOAT DEFAULT 0,
-    Back_ROI FLOAT DEFAULT 0,
-    Lay_ROI FLOAT DEFAULT 0,
-    Back_S_Rate FLOAT DEFAULT 0,
-    Lay_S_Rate FLOAT DEFAULT 0,
-    BackProbability FLOAT DEFAULT 0);'''
+    runners INT);'''
 
 
 GENERAL_XLSX_COLUMNS = [
@@ -222,18 +227,15 @@ GENERAL_XLSX_COLUMNS = [
     "Runners"
 ]
 
-BACK_WIN_XLSX_COLUMNS = [
-    "Betfair_SP_Order",
-    "Won_Races",
-    "Back_Win",
-    "Back_ROI",
-    "Back_S_Rate",
-    "BackProbability"
-]
-
-
-LAY_WIN_XLSX_COLUMNS = [
-    "Betfair_SP_Order",
+BACK_LAY_XLSX_COLUMNS = [
+    'Betfair_SP_Order',
+    'Back_Win',
+    'Winners',
+    'Back_ROI',
+    'Back_S_Rate',
+    'BackProbability',
+    '',
+    'Betfair_SP_Order',
     "Lost_Races",
     "Lay_Win",
     "Lay_ROI",
