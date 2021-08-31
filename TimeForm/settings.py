@@ -1,14 +1,10 @@
-import csv
 import os
+import logging
 import sqlite3
 import pathlib
-import datetime as dt
-from loggers import custom_logger
-
 
 
 PATH = str(pathlib.Path(__file__).parent)
-LOGGER = custom_logger(PATH, "general")
 
 ##################################################
 ############# DATABASE CONFIGS ###################
@@ -24,14 +20,6 @@ CURSOR = CONNECTION.cursor()
 
 
 ####################################################################################################
-CSV_DATA_DIR = pathlib.Path(PATH + "/CSV")
-
-if not CSV_DATA_DIR.exists() or not os.path.isdir(PATH + "/CSV"):
-    print('\nATTENTION: There is no "CSV" folder in %s' % PATH)
-    os.mkdir(PATH + '/CSV')
-    print('IMPORTANT: The "CSV" folder has been created successfully in "%s"\n' % PATH)
-
-
 XLSX_DATA_DIR = pathlib.Path(PATH + "/XLSX")
 
 if not XLSX_DATA_DIR.exists() or not os.path.isdir(PATH + "/XLSX"):
@@ -39,7 +27,6 @@ if not XLSX_DATA_DIR.exists() or not os.path.isdir(PATH + "/XLSX"):
     os.mkdir(PATH + '/XLSX')
     print('IMPORTANT: The "XLSX" folder has been created successfully in "%s"\n' % PATH)
 ####################################################################################################
-
 
 
 ######################################################################
@@ -76,6 +63,8 @@ def get_race_type_name(header):
             race_type_name = 'JUVENILE HURDLE'
         elif 'NOVICES' in header:
             race_type_name = 'NOVICES HURDLE'
+        elif 'CHAMPION' in header:
+            race_type_name = 'CHAMPION HURDLE'
 
     elif 'STAKES' in header:
         race_type_name = 'OTHER FLAT'
@@ -92,42 +81,55 @@ def get_race_type_name(header):
             race_type_name = 'CHASE HANDICAP'
         elif 'SELLING' in header:
             race_type_name = 'SELLING HANDICAP'
+
+    elif 'RELKEEL' in header:
+        race_type_name = 'RELKEEL'
+        if 'HURDLE' in header:
+            race_type_name = 'RELKEEL HURDLE'
+
+    elif 'CHASE' in header:
+        race_type_name = 'CHASE'
+        if 'HOUSE' in header:
+            race_type_name = 'HOUSE CHASE'
+        elif 'NOVICES' in header:
+            race_type_name = 'NOVICES CHASE'
+
     else:
         race_type_name = ' '.join(header[-3:-1])
-    
-    return race_type_name
+
+    return race_type_name.replace('(', '').replace(')', '')
 
 
+######################################################################
+####################### LOGGING CONFIGURATIONS #######################
+######################################################################
+def custom_logger(path, filename):
+    logger = logging.getLogger("Timeform")
+    handler = logging.FileHandler(path + "/%s.log" % filename)
+    formater = logging.Formatter(
+        "%(asctime)s| %(message)s ---> %(lineno)s", "%Y-%m-%d %H:%m"
+    )
+    handler.setFormatter(formater)
+    logger.addHandler(handler)
+    level = logging.INFO
+    logger.setLevel(level)
+
+    return logger
+
+
+LOGGER = custom_logger(PATH, "events")
+######################################################################
 
 URL = 'https://www.timeform.com/horse-racing/results/yesterday'
+HOME_URL = 'https://www.timeform.com/horse-racing'
+LOGIN_URL = 'https://www.timeform.com/horse-racing/account/sign-in?returnUrl=%2Fhorse-racing%2F'
 
 
-CURRENT_YEAR = dt.datetime.now().year
-CURRENT_MONTH = dt.datetime.now().month
-CURRENT_DAY = dt.datetime.now().day
+FILTER_RACE = input(
+    '\nFilter by Race Type(press Enter if there is no filters): ').upper()
+FILTER_DISTANCE = input(
+    '\nFilter by Distance(press Enter if there is no filters): ').lower()
 
-
-
-MONTHS = {
-    1: 31, 2: 28,
-    3: 31, 4: 30,
-    5: 31, 6: 30,
-    7: 31, 8: 31,
-    9: 30, 10: 31,
-    11: 30, 12: 31,
-}
-
-
-
-LAST_WEEK = dt.datetime.strftime((dt.datetime.today() - dt.timedelta(days=7)), '%-d/%-m/%y')
-LAST_MONTH = dt.datetime.strftime((dt.datetime.today() - dt.timedelta(days=31)), '%-d/%-m/%y')
-TODAY = dt.datetime.strftime((dt.datetime.today() - dt.timedelta(days=1)), '%-d/%-m/%y')
-
-TIMELINES = {
-    "week": LAST_WEEK,
-    "month": LAST_MONTH,
-    "today": TODAY
-}
 
 HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
@@ -146,16 +148,25 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:90.0) Gecko/20100101 Firefox/90.0",
 }
 
+
 COOKIES = {
-    ".AspNet.ApplicationCookie": "Zd-6Jjrh1XedYEINXxh9QmVzOiAEFvolcX6VCVX7BBesErbnieAZt25Girq_E3sraX8HLk8K4voE-7QBYtdjvtLZsbDTumDVdHB2sJlcb4L1dMypXAgaBa0JHYONK48kzyFK_yWe-VqppmlVSzEGR1jWzWGS_SnY8PZqnOQnv4D9nNf1S71lSFTqRPmQnxYyJiWoJdYrSB5c0tANrtVfkrb6BBexwPuXn9BbZ96eh2Stq-wjgaNVo_NLAllxoe5s38APATB1ojC4Q-VrhQa35zIhmEtXLARPfyZ7_C1hw2mrN2nzHePLAEHSbMIgLG9nCD2FDwFpHHmL-xxOUKpbTkAYj5Sww6O_wCLyW0DfqzH-6RcFveR2oVUMLHPZzL_oxRKWFgZ6sQ-DWaWQtZT26eh2AxO200pAJcG8uwaURZVQ_6R0k87cjij0AQUHGntrOV6-P4Fw1HT82UnNz4cOKbFOFsM",
+    "__qca": "P0-1958240426-1629673197218",
+    "__RequestVerificationToken_L2hvcnNlLXJhY2luZw2": "umrvl-XkEhCb-EH2_mq2UvsaOB1tyZhRPG2ZYETvUxinwzqdyao_DIOVgyZNp6ux2vgMNNO73HaYDkkUQUl9jo10Yjg1",
+    "_fbp": "fb.1.1629673197077.388472838",
+    "_ga": "GA1.2.177661324.1629673196",
+    "_ga_76L4M34CLJ": "GS1.1.1629675314.2.1.1629675342.0",
+    "_privy_BC6B11B656215F90B8373EC5": "{\"uuid\":\"27835cd4-1cc4-45c4-9285-8cafa5dca4f0\"}",
+    "_vis_opt_s": "1|",
+    "_vwo_uuid_v2": "DB8BF75C27191CC908E25E599F7A99169|4af3475c1829209f92ec1d669ec64913",
+    ".AspNet.ApplicationCookie": "iJYFeoGrKzUwWo31jNaUOppDc7VsyQTGHsEogQnSTkHtUCCkQ3klwgMhhae5Yd4ifzfPbmvtakHm77yGiefxg4pwn3yGOrLUGFv_fzfTIhm6VtURr8K_i15r1pm2EBTV62wz7Ae__xwKo4kGMRf0jyQXW6uw1pnx2nNbSH6OjgmUQ2V4vNbgyNsn1j-k_zD7F63ObPt8yUw-v2EhS1f0aevab9lNyIw4JPZVCSn3L3IJcKGL5f84qQOMKLKD0qureb1Xsq-mkEC1zunpsm8SOplViOgrUj3kOAqqFIyIEaoicCa5y3cv6NTENrL71Ri5HSglQ-FBJfrkn5ECmVB7LRxnNjqGrq34eYzPOHufa5a1dmJ-rIGr39PnGk3k05VaOk_pWIZHaFq_YvpMqzqtdKiPrbq2hQmps-1A2Jj8-NrvROq0LQDE3URXTmF6JVJSVhCyewaY78INuHdL4olc74X6H7k",
+    "ai_user": "wOUvR|2021-08-22T23:00:34.604Z",
     "ARRAffinity": "c6f29867043fc4d89919a10a8b4f179c6019ba9f45ee19561219d7cdc0fa20ba",
     "ASLBSA": "6227e485cfa5652212f4a30249a2ee8316d9030eef4fd24ab7d24dacfa9a1804,b51843e69dd1f73dfa83a72a15c2303b80a8ef35bce36ade013e0f1356891fcb,a4b51a5fbeb74b972c1a2a7a81843751791fa7ed7d63fca6012d495823104469",
     "ASLBSACORS": "6227e485cfa5652212f4a30249a2ee8316d9030eef4fd24ab7d24dacfa9a1804,b51843e69dd1f73dfa83a72a15c2303b80a8ef35bce36ade013e0f1356891fcb,a4b51a5fbeb74b972c1a2a7a81843751791fa7ed7d63fca6012d495823104469",
-    "ASP.NET_SessionId": "55ize12xvdjqs0fmaebfmuis",
+    "ASP.NET_SessionId": "xw5ripz3qvkhx0fojwo2zirc",
     "TF-CookiePrivacyPolicy": "Allow",
     "TFM": "DeviceId=d77e652f-373d-4954-8d00-60d197b329bf",
 }
-
 
 DB_COLUMS = (
     "date",
@@ -178,7 +189,6 @@ DB_COLUMS = (
     "L2B",
     "runners",
 )
-
 
 
 CREATE_RACE_RESULT_TABLE_QUERY = '''
@@ -212,25 +222,14 @@ GENERAL_XLSX_COLUMNS = [
     "Distance",
     "RaceType",
     "Position",
-    "HorseNumber",
-    "HorseName",
-    "Jokey",
-    "Trainer",
-    "HorseAge",
-    "HorseWeight",
-    "Bsp",
-    "Bpsp",
-    "High",
-    "Low",
-    "B2L",
-    "L2B",
     "Runners"
 ]
 
 BACK_LAY_XLSX_COLUMNS = [
     'Betfair_SP_Order',
-    'Back_Win',
+    'TotalRaces',
     'Winners',
+    'Back_Win',
     'Back_ROI',
     'Back_S_Rate',
     'BackProbability',

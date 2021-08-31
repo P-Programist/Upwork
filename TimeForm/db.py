@@ -1,348 +1,296 @@
-import csv
-
+import datetime as dt
 import openpyxl
 
 from settings import (
-    PATH, 
+    PATH,
     DB_COLUMS,
     DB_TABLE_NAME,
-    TIMELINES,
     GENERAL_XLSX_COLUMNS,
     BACK_LAY_XLSX_COLUMNS,
     CONNECTION, CURSOR,
+    FILTER_RACE, FILTER_DISTANCE
 )
-
 
 INSERT_COLUMNS_ROW = ', '.join(DB_COLUMS)
 
 
-def upload_csv(csv_file):
-    reader = csv.reader(csv_file)
-    try:
-        next(reader)
-        return reader
-    except StopIteration:
-        return []
-
-
-
-def insert(table_name, columns, reader):
-        # race_date = row[0]
-        # race_time = row[1]
-        # race_type = row[4]
-        # position = row[5]
-
-        # if race_types and current_date == race_date:
-        #     if race_type in race_types:
-        #         if position == '1':
-        #             CURSOR.execute(
-        #                 'UPDATE %s \
-        #                     SET \
-        #                         back_winners = back_winners + 1, \
-        #                         back_win = (bsp-1) * stake, \
-        #                         lay_win = -(bsp-1) * stake \
-        #                     WHERE race_type = \'%s\' AND date = \'%s\' AND time = \'%s\';' % (table_name, race_type.replace('\'',''), race_date, race_time))
-
-        #             CONNECTION.commit()
-
-        #             CURSOR.execute(
-        #                 'UPDATE %s \
-        #                     SET \
-        #                         back_roi = back_win / back_winners, \
-        #                         lay_roi = lay_win / lay_winners, \
-        #                         back_s_rate = (back_winners / (back_winners + lay_winners)) * 100, \
-        #                         lay_s_rate = (lay_winners / (back_winners + lay_winners)) * 100, \
-        #                         back_probability = (back_winners / (back_winners + lay_winners)) * 100 \
-        #                     WHERE race_type = \'%s\' AND date = \'%s\' AND time = \'%s\';' % (table_name, race_type.replace('\'',''), race_date, race_time))
-
-        #             CONNECTION.commit()
-        #         else:
-        #             CURSOR.execute(
-        #                 'UPDATE %s \
-        #                     SET \
-        #                         lay_winners = lay_winners + 1, \
-        #                         back_win = back_win - stake, \
-        #                         lay_win = lay_win + stake \
-        #                     WHERE race_type = \'%s\' AND time = \'%s\' AND time = \'%s\';' % (table_name, race_type.replace('\'',''), race_date, race_time))
-
-        #             CONNECTION.commit()
-                    
-        #             CURSOR.execute(
-        #                 'UPDATE %s \
-        #                     SET \
-        #                         back_roi = back_win / back_winners, \
-        #                         lay_roi = lay_win / lay_winners, \
-        #                         back_s_rate = (back_winners / (back_winners + lay_winners)) * 100, \
-        #                         lay_s_rate = (lay_winners / (back_winners + lay_winners)) * 100, \
-        #                         back_probability = (back_winners / (back_winners + lay_winners)) * 100 \
-        #                     WHERE race_type = \'%s\' AND time = \'%s\' AND time = \'%s\';' % (table_name, race_type.replace('\'',''), race_date, race_time))
-        #             CONNECTION.commit()
-        #     else:
-        #         CURSOR.execute("INSERT INTO %s (%s) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);" % (
-        #             table_name, columns), row)
-
-        #         CONNECTION.commit()
-    
-        # else:
-        #     if position == '1':
-        #         back_win_formula = (float(row[12]) - 1) * 1
-        #         lay_win_formula = -(float(row[12]) - 1) * 1
-        #         back_roi = back_win_formula
-        #         lay_roi = lay_win_formula
-        #         back_s_rate = 100
-        #         lay_s_rate = 0
-        #         back_probability = back_s_rate
-
-        #         row.extend([1, 1, 0, back_win_formula, lay_win_formula, back_roi, lay_roi, back_s_rate, lay_s_rate, back_probability])
-        #     else:
-        #         back_win_formula = -1
-        #         lay_win_formula = 1
-        #         back_roi = back_win_formula
-        #         lay_roi = lay_win_formula
-        #         back_s_rate = 0
-        #         lay_s_rate = 100
-        #         back_probability = back_s_rate
-
-        #         row.extend([1, 0, 1, back_win_formula, lay_win_formula, back_roi, lay_roi, back_s_rate, lay_s_rate, back_probability])
-
-    CURSOR.executemany("INSERT INTO %s (%s) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);" % (table_name, columns), reader)
-    CONNECTION.commit()
-
-        
-
-
-def select(column_name: str, table_name: str, conditions: str=None):
+def select(column_name: str, table_name: str, conditions: str = None):
     if conditions:
         sql = "SELECT %s FROM %s %s;" % (column_name, table_name, conditions)
     else:
         sql = "SELECT %s FROM %s;" % (column_name, table_name)
 
-    
     result = CURSOR.execute(sql)
     rows = result.fetchall()
 
-    for res in rows:
-        yield res
+    return tuple(rows)
 
 
 def data_uploader(data=None):
-    if not data:
-        csv_file = open(PATH + '/CSV/data.csv', 'r')
-        data = tuple(upload_csv(csv_file))
-        csv_file.close()
-
-    insert(DB_TABLE_NAME, INSERT_COLUMNS_ROW, data)
-    
+    CURSOR.executemany("INSERT INTO %s (%s) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);" % (
+        DB_TABLE_NAME, INSERT_COLUMNS_ROW), data)
+    CONNECTION.commit()
 
 
+####################################################################################################
+################################## TODAY RACES GENERAL INFORMATION #################################
+####################################################################################################
+def get_period_information(xlsx_header_data):
+    '''
+    The function might either accept or not a list with race's dates.
+    Then the accepted data will be substituted at the top of XLSX file to show which races were for that specific period of time.
+    '''
+    one_month_race_time = []
+    three_months_race_time = []
+    last_year_race_time = []
 
-def db_to_xslx_today():
-    ####################################################################################################
-    ################################## TODAY RACES GENERAL INFORMATION #################################
-    ####################################################################################################
+    LAST_MONTH = dt.datetime.strftime(
+        (dt.datetime.today() - dt.timedelta(days=31)), '%-d/%-m/%y')
+    LAST_THREE_MONTHS = dt.datetime.strftime(
+        (dt.datetime.today() - dt.timedelta(days=90)), '%-d/%-m/%y')
+    LAST_YEAR = dt.datetime.strftime(
+        (dt.datetime.today() - dt.timedelta(days=365)), '%-d/%-m/%y')
 
-    today_workbook_general = openpyxl.Workbook()
-    today_worksheet_general = today_workbook_general.active
-    today_race_general = select(','.join(DB_COLUMS[:19]), DB_TABLE_NAME, 'WHERE date = \'%s\' GROUP BY race_type' % TIMELINES.get('today'))
+    one_month_min_id = select(
+        'MIN(id)',
+        DB_TABLE_NAME,
+        'WHERE date = \'%s\'' % LAST_MONTH
+    )
 
-    today_worksheet_general.append(GENERAL_XLSX_COLUMNS)
+    three_month_min_id = select(
+        'MIN(id)',
+        DB_TABLE_NAME,
+        'WHERE date = \'%s\'' % LAST_THREE_MONTHS
+    )
 
-    for row in today_race_general:
-        if row:
-            today_worksheet_general.append(row)
+    last_year_min_id = select(
+        'MIN(id)',
+        DB_TABLE_NAME,
+        'WHERE date = \'%s\'' % LAST_YEAR
+    )
 
+    for year_list, period_id in ((one_month_race_time, one_month_min_id), (three_months_race_time, three_month_min_id), (last_year_race_time, last_year_min_id)):
+        for header_race_type in xlsx_header_data:
+            race = header_race_type[-2]
 
-    # today_worksheet_general.append(['','','','','','','','','','','','','','','','','','','',])
-    # today_worksheet_general.append(['','','','','','','','','','','','','','','','','','','',])
+            if len(period_id) > 0:
+                if len(period_id[0]) > 0:
+                    if period_id[0][0]:
+                        sql = '''WHERE id >= \'%s\'
+                            AND race_type = \'%s\'
+                            GROUP BY date, time, race_type
+                            ORDER BY time, race_type''' % (period_id[0][0], race)
 
+                        if not three_months_race_time:
+                            sql = '''WHERE id >= \'%s\'
+                                AND race_type = \'%s\'
+                                GROUP BY date, time, race_type
+                                ORDER BY time, race_type''' % (int(period_id[0][0]) + 3, race)
 
-    # worksheet_rows = today_worksheet_general.iter_rows()
-    # next(worksheet_rows)
+                            if FILTER_RACE:
+                                sql = '''WHERE id >= \'%s\'
+                                    AND race_type = \'%s\'
+                                    GROUP BY date, time, race_type
+                                    ORDER BY time, race_type''' % (int(period_id[0][0]) + 3, FILTER_RACE)
 
+                                if FILTER_DISTANCE:
+                                    sql = '''WHERE id >= \'%s\'
+                                        AND race_type = \'%s\'
+                                        AND distance = \'%s\'
+                                        GROUP BY date, time, race_type
+                                        ORDER BY time, race_type''' % (int(period_id[0][0]) + 3, FILTER_RACE, FILTER_DISTANCE)
 
-    # for line in worksheet_rows:
-    #     if not line[0].internal_value or not line[1].internal_value:
-    #         continue
+                            if FILTER_DISTANCE:
+                                sql = '''WHERE id >= \'%s\'
+                                    AND distance = \'%s\'
+                                    GROUP BY date, time, race_type
+                                    ORDER BY time, race_type''' % (int(period_id[0][0]) + 3, FILTER_DISTANCE)
+                        else:
+                            if FILTER_RACE:
+                                sql = '''WHERE id >= \'%s\'
+                                    AND race_type = \'%s\'
+                                    GROUP BY date, time, race_type
+                                    ORDER BY time, race_type''' % (period_id[0][0], FILTER_RACE)
 
-    #     back_lay_rows = tuple(
-    #         select(
-    #             'Betfair_SP_Order, Winners, Lost_Races, Back_Win, Lay_Win, Back_ROI, Lay_ROI, Back_S_Rate, Lay_S_Rate, BackProbability', 
-    #             DB_TABLE_NAME, 
-    #             'WHERE date = \'%s\' AND race_type = \'%s\'' % (line[0].internal_value, line[4].internal_value)
-    #         )
-    #     )
+                                if FILTER_DISTANCE:
+                                    sql = '''WHERE id >= \'%s\'
+                                        AND race_type = \'%s\'
+                                        AND distance = \'%s\'
+                                        GROUP BY date, time, race_type
+                                        ORDER BY time, race_type''' % (period_id[0][0], FILTER_RACE, FILTER_DISTANCE)
 
-        
-    #     today_worksheet_general.append(
-    #         [
-    #             '',
-    #             '',
-    #             '',
-    #             '',
-    #             line[0].internal_value, 
-    #             line[1].internal_value,
-    #             line[2].internal_value, 
-    #             line[3].internal_value,
-    #             line[4].internal_value, 
-    #         ]
-    #     )
-    #     today_worksheet_general.append(BACK_LAY_XLSX_COLUMNS)
+                            if FILTER_DISTANCE:
+                                sql = '''WHERE id >= \'%s\'
+                                    AND distance = \'%s\'
+                                    GROUP BY date, time, race_type
+                                    ORDER BY time, race_type''' % (period_id[0][0], FILTER_DISTANCE)
 
-    #     for certain_time_row in back_lay_rows:
-    #         if certain_time_row:
-    #             today_worksheet_general.append(
-    #                 (
-    #                     certain_time_row[0],
-    #                     certain_time_row[1],
-    #                     certain_time_row[3],
-    #                     certain_time_row[5],
-    #                     certain_time_row[7],
-    #                     certain_time_row[9],
-    #                     '',
-    #                     certain_time_row[2],
-    #                     certain_time_row[4],
-    #                     certain_time_row[6],
-    #                     certain_time_row[8],
-    #                 )
-    #             )
-    #         else:
-    #             break
-        
-    #     if not back_lay_rows:
-    #         break
-    
-    #     today_worksheet_general.append(['','','','','','','','','','','','','','','','','','','',])
-    #     today_worksheet_general.append(['','','','','','','','','','','','','','','','','','','',])
+                        year_list.extend(
+                            select('date, time, race_type', DB_TABLE_NAME, sql)
+                        )
+                else:
+                    sql = '''WHERE id >= (SELECT MIN(id) FROM races)
+                        AND race_type = \'%s\'
+                        GROUP BY date, time, race_type
+                        ORDER BY time, race_type''' % race
 
-    today_workbook_general.save(PATH + '/XLSX/RacesGeneral.xlsx')
+                    if FILTER_RACE:
+                        sql = '''WHERE id >= (SELECT MIN(id) FROM races)
+                            AND race_type = \'%s\'
+                            GROUP BY date, time, race_type
+                            ORDER BY time, race_type''' % FILTER_RACE
 
+                        if FILTER_DISTANCE:
+                            sql = '''WHERE id >= (SELECT MIN(id) FROM races)
+                                AND race_type = \'%s\'
+                                AND distance = \'%s\'
+                                GROUP BY date, time, race_type
+                                ORDER BY time, race_type''' % (FILTER_RACE, FILTER_DISTANCE)
 
-#     ####################################################################################################
-#     ################################# TODAY RACES BACK WIN INFORMATION #################################
-#     ####################################################################################################
+                    if FILTER_DISTANCE:
+                        sql = '''WHERE id >= (SELECT MIN(id) FROM races)
+                            AND distance = \'%s\'
+                            GROUP BY date, time, race_type
+                            ORDER BY time, race_type''' % FILTER_DISTANCE
 
-#     today_workbook_back_win = openpyxl.Workbook()
-#     today_worksheet_back_win = today_workbook_back_win.active
-#     today_race_details = select(','.join(['Betfair_SP_Order'] + list(DB_COLUMS[21::2])), DB_TABLE_NAME, 'WHERE date = \'%s\'' % TIMELINES.get('today'))
+                    year_list.extend(
+                        select('date, time, race_type', DB_TABLE_NAME, sql))
 
-#     today_worksheet_back_win.append(BACK_WIN_XLSX_COLUMNS)
+    timelines_data = {
+        "one_month": (
+            "OneMonthRaces",
+            set(row for row in one_month_race_time),
+        ),
+        "three_months": (
+            "ThreeMonthsRaces",
+            set(row for row in three_months_race_time),
+        ),
+        "year": (
+            "LastYearRaces",
+            set(row for row in last_year_race_time),
+        )
+    }
 
-#     for row in today_race_details:
-#         if row:
-#             today_worksheet_back_win.append(row)
-#     today_workbook_back_win.save(PATH + '/XLSX/TODAY/todayRacesBackWin.xlsx')
-
-
-#     ####################################################################################################
-#     ################################## TODAY RACES LAY WIN INFORMATION #################################
-#     ####################################################################################################
-
-#     today_workbook_lay_win = openpyxl.Workbook()
-#     today_worksheet_lay_win = today_workbook_lay_win.active
-#     today_race_details = select(','.join(['Betfair_SP_Order'] + list(DB_COLUMS[22::2])), DB_TABLE_NAME, 'WHERE date = \'%s\'' % TIMELINES.get('today'))
-
-#     today_worksheet_lay_win.append(LAY_WIN_XLSX_COLUMNS)
-
-#     for row in today_race_details:
-#         if row:
-#             today_worksheet_lay_win.append(row)
-#     today_workbook_lay_win.save(PATH + '/XLSX/TODAY/todayRacesLayWin.xlsx')
-    
-
-# def db_to_xslx_last_month():
-#     ####################################################################################################
-#     ################################ LAST MONTH RACES GENERAL INFORMATION ##############################
-#     ####################################################################################################
-
-#     lastMonth_workbook_general = openpyxl.Workbook()
-#     lastMonth_worksheet_general = lastMonth_workbook_general.active
-#     month_id = next(select('id', DB_TABLE_NAME, 'WHERE date = \'%s\' LIMIT 1' % TIMELINES.get('month')))
-#     month_race = select(','.join(DB_COLUMS[:19]), DB_TABLE_NAME, 'WHERE id >= %s' % month_id)
-
-#     lastMonth_worksheet_general.append(GENERAL_XLSX_COLUMNS)
-
-#     for row in month_race:
-#         lastMonth_worksheet_general.append(row)
-#     lastMonth_workbook_general.save(PATH + '/XLSX/LAST_MONTH/lastMonthRacesGeneral.xlsx')
-
-
-#     ####################################################################################################
-#     ############################### LAST MONTH RACES BACK WIN INFORMATION ##############################
-#     ####################################################################################################
-
-#     lastMonth_workbook_back_win = openpyxl.Workbook()
-#     lastMonth_worksheet_back_win = lastMonth_workbook_back_win.active
-#     month_id = next(select('id', DB_TABLE_NAME, 'WHERE date = \'%s\' LIMIT 1' % TIMELINES.get('month')))
-#     month_race = select(','.join(['Betfair_SP_Order'] + list(DB_COLUMS[21::2])), DB_TABLE_NAME, 'WHERE id >= %s' % month_id)
-
-#     lastMonth_worksheet_back_win.append(BACK_WIN_XLSX_COLUMNS)
-
-#     for row in month_race:
-#         lastMonth_worksheet_back_win.append(row)
-#     lastMonth_workbook_back_win.save(PATH + '/XLSX/LAST_MONTH/lastMonthRacesBackWin.xlsx')
+    return timelines_data
 
 
-#     ####################################################################################################
-#     ################################ LAST MONTH RACES LAY WIN INFORMATION ##############################
-#     ####################################################################################################
+def db_to_xslx(xlsx_header_data=[]):
+    timelines = get_period_information(xlsx_header_data)
 
-#     lastMonth_workbook_lay_win = openpyxl.Workbook()
-#     lastMonth_worksheet_lay_win = lastMonth_workbook_lay_win.active
-#     month_race = select(','.join(['Betfair_SP_Order'] + list(DB_COLUMS[22::2])), DB_TABLE_NAME, 'WHERE id >= %s' % month_id)
+    for timeline in timelines:
+        workbook_general = openpyxl.Workbook()
+        worksheet_general = workbook_general.active
 
-#     lastMonth_worksheet_lay_win.append(LAY_WIN_XLSX_COLUMNS)
+        worksheet_general.append(GENERAL_XLSX_COLUMNS)
 
-#     for row in month_race:
-#         lastMonth_worksheet_lay_win.append(row)
-#     lastMonth_workbook_lay_win.save(PATH + '/XLSX/LAST_MONTH/lastMonthRacesLayWin.xlsx')
+        filename = timelines.get(timeline)[0]
+        date_and_race = timelines.get(timeline)[1]
 
+        for header in xlsx_header_data:
+            worksheet_general.append(header)
 
-# def db_to_xslx_alltime():
-#     ####################################################################################################
-#     ################################ ALL TIME RACES GENERAL INFORMATION ################################
-#     ####################################################################################################
+        for _ in range(4):
+            worksheet_general.append(['' for _ in range(12)])
 
-#     allTime_workbook_general = openpyxl.Workbook()
-#     allTime_worksheet_general = allTime_workbook_general.active
-#     allTime_race_general = select(','.join(DB_COLUMS[:19]), DB_TABLE_NAME)
+        race_data = {}
+        for date, time, race_type in date_and_race:
+            one_race_data = tuple(select(','.join(DB_COLUMS), DB_TABLE_NAME,
+                                         'WHERE date = \'%s\' AND time = \'%s\' AND race_type = \'%s\' ORDER BY race_type, id' % (date, time, race_type)))
 
-#     allTime_worksheet_general.append(GENERAL_XLSX_COLUMNS)
+            for count, line in enumerate(one_race_data, 1):
+                if not race_data.get(line[4]):
+                    race_data[line[4]] = {}
 
-#     for row in allTime_race_general:
-#         allTime_worksheet_general.append(row)
-#     allTime_workbook_general.save(PATH + '/XLSX/ALL_TIME/allTimeRacesGeneral.xlsx')
+                if not race_data.get(line[4]).get(count):
+                    race_data.get(line[4])[count] = {}
 
+                if not race_data.get(line[4])[count]:
+                    if str(line[5]) == '1':
+                        race_data.get(line[4])[count]["Winners"] = 1
+                        race_data.get(line[4])[count]["Lost_Races"] = 0
 
-#     ####################################################################################################
-#     ############################### ALL TIME RACES BACK WIN INFORMATION ################################
-#     ####################################################################################################
+                        race_data.get(line[4])[count]["Back_Win"] = (
+                            line[12] - 1) * 1
+                        race_data.get(line[4])[
+                            count]["Lay_Win"] = -(line[12] - 1) * 1
 
-#     allTime_workbook_back_win = openpyxl.Workbook()
-#     allTime_worksheet_back_win = allTime_workbook_back_win.active
-#     allTime_race_details = select(','.join(['Betfair_SP_Order'] + list(DB_COLUMS[21::2])), DB_TABLE_NAME)
+                        race_data.get(line[4])[count]["Back_ROI"] = (
+                            line[12] - 1) * 1
+                        race_data.get(line[4])[
+                            count]["Lay_ROI"] = -(line[12] - 1) * 1
 
-#     allTime_worksheet_back_win.append(BACK_WIN_XLSX_COLUMNS)
+                        race_data.get(line[4])[count]["Back_S_Rate"] = 100
+                        race_data.get(line[4])[count]["Lay_S_Rate"] = 0
 
-#     for row in allTime_race_details:
-#         allTime_worksheet_back_win.append(row)
-#     allTime_workbook_back_win.save(PATH + '/XLSX/ALL_TIME/allTimeRacesBackWin.xlsx')
+                        race_data.get(line[4])[count]["BackProbability"] = 100
 
+                    else:
+                        race_data.get(line[4])[count]["Winners"] = 0
+                        race_data.get(line[4])[count]["Lost_Races"] = 1
 
-#     ####################################################################################################
-#     ################################ ALL TIME RACES LAY WIN INFORMATION ################################
-#     ####################################################################################################
+                        race_data.get(line[4])[count]["Back_Win"] = -1
+                        race_data.get(line[4])[count]["Lay_Win"] = 1
 
-#     allTime_workbook_lay_win = openpyxl.Workbook()
-#     allTime_worksheet_lay_win = allTime_workbook_lay_win.active
-#     allTime_race_details = select(','.join(['Betfair_SP_Order'] + list(DB_COLUMS[22::2])), DB_TABLE_NAME)
+                        race_data.get(line[4])[count]["Back_ROI"] = -1
+                        race_data.get(line[4])[count]["Lay_ROI"] = 1
 
-#     allTime_worksheet_lay_win.append(LAY_WIN_XLSX_COLUMNS)
+                        race_data.get(line[4])[count]["Back_S_Rate"] = 0
+                        race_data.get(line[4])[count]["Lay_S_Rate"] = 100
 
-#     for row in allTime_race_details:
-#         allTime_worksheet_lay_win.append(row)
-#     allTime_workbook_lay_win.save(PATH + '/XLSX/ALL_TIME/allTimeRacesLayWin.xlsx')
+                        race_data.get(line[4])[count]["BackProbability"] = 0
 
+                else:
+                    if str(line[5]) == '1':
+                        winners = race_data.get(line[4])[count]["Winners"]
+                        lost_race = race_data.get(line[4])[count]["Lost_Races"]
 
-if __name__ == "__main__":
-    db_to_xslx_today()
+                        race_data.get(line[4])[count]["Winners"] = winners + 1
+                        race_data.get(line[4])[count]["Back_Win"] = (
+                            line[12] - 1) * 1  # ???
+                        race_data.get(line[4])[
+                            count]["Lay_Win"] = -(line[12] - 1) * 1
+                        race_data.get(line[4])[count]["Back_ROI"] = (
+                            (line[12] - 1) * 1) / (winners + 1)
+                        race_data.get(line[4])[count]["Back_S_Rate"] = round(
+                            (winners + 1) / ((winners + 1) + lost_race) * 100, 3)
+                        race_data.get(line[4])[count]["BackProbability"] = round(
+                            (winners + 1) / ((winners + 1) + lost_race) * 100, 3)
 
+                    else:
+                        winners = race_data.get(line[4])[count]["Winners"]
+                        lost_race = race_data.get(line[4])[count]["Lost_Races"]
+                        back_win = race_data.get(line[4])[count]["Back_Win"]
+                        lay_win = race_data.get(line[4])[count]["Lay_Win"]
+
+                        race_data.get(line[4])[
+                            count]["Lost_Races"] = lost_race + 1
+                        race_data.get(line[4])[
+                            count]["Back_Win"] = back_win - 1  # ???
+                        race_data.get(line[4])[count]["Lay_Win"] = lay_win + 1
+                        race_data.get(line[4])[count]["Lay_ROI"] = round(
+                            (lay_win + 1) / (lost_race + 1), 3)
+                        race_data.get(line[4])[count]["Lay_S_Rate"] = round(
+                            (lost_race + 1) / ((winners) + lost_race + 1) * 100, 3)
+
+        for race_type, race_values in race_data.items():
+            worksheet_general.append(
+                ['', '', '', '', '', '', '', race_type])
+            worksheet_general.append(BACK_LAY_XLSX_COLUMNS)
+
+            for bsp, data in race_values.items():
+                values = list(data.values())
+                back_values = values[0::2]
+                lay_values = values[1::2]
+
+                row = [bsp, int(back_values[0]) + int(lay_values[0])]
+                row.extend(back_values)
+                row.append('')
+                row.append(bsp)
+                row.extend(lay_values)
+
+                worksheet_general.append(row)
+
+            for _ in range(4):
+                worksheet_general.append(['' for _ in range(12)])
+
+        workbook_general.save(PATH + '/XLSX/%s.xlsx' % filename)
